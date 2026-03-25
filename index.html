@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CAN-HMI API Demo</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-left">
+    <span class="logo">🚗 CAN-HMI API Demo</span>
+    <span class="demo-tag">MOCK</span>
+  </div>
+
+  <div class="header-center">
+    <div class="ctrl-group">
+      <span class="ctrl-label">Mode</span>
+      <div class="toggle">
+        <button class="toggle-btn" data-mode="user">User</button>
+        <button class="toggle-btn active" data-mode="dev">Dev</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">Profile</span>
+      <select class="sel" id="profile-select"></select>
+    </div>
+  </div>
+
+  <div class="header-right">
+    <span id="ws-badge"  class="badge badge--warn">● WS</span>
+    <span id="api-count" class="badge badge--neutral">0 calls</span>
+    <button class="btn btn-sm" id="btn-reset" title="Reset all demo data to defaults">↺ Reset</button>
+  </div>
+</header>
+
+<!-- ── Nav tabs ─────────────────────────────────────────────────────────────── -->
+<nav class="nav-tabs">
+  <button class="nav-tab active" data-tab="dashboard">📊 Dashboard</button>
+  <button class="nav-tab"        data-tab="profiles">👤 Profiles</button>
+  <button class="nav-tab dev-only" data-tab="config">⚙️ Config</button>
+  <button class="nav-tab dev-only" data-tab="signals-info">ℹ️ Signals Info</button>
+  <button class="nav-tab"        data-tab="api-log">📋 API Log</button>
+</nav>
+
+<!-- ── Main content ─────────────────────────────────────────────────────────── -->
+<main class="main">
+
+  <!-- DASHBOARD -->
+  <div class="tab-pane active" id="tab-dashboard">
+    <div id="signals-grid" class="signals-grid"></div>
+  </div>
+
+  <!-- PROFILES -->
+  <div class="tab-pane" id="tab-profiles">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>User Profiles &nbsp;<span class="badge badge--neutral">GET/POST/PUT/DELETE /api/profile</span></h2>
+        <button class="btn btn-primary" id="btn-add-profile">+ New Profile</button>
+      </div>
+      <div id="profiles-list"></div>
+    </div>
+  </div>
+
+  <!-- CONFIG (dev only) -->
+  <div class="tab-pane" id="tab-config">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Configurations &nbsp;<span class="badge badge--dev">Dev Mode</span>&nbsp;<span class="badge badge--neutral">GET/PUT /config</span></h2>
+      </div>
+      <div id="configs-list"></div>
+    </div>
+  </div>
+
+  <!-- SIGNALS INFO (dev only) -->
+  <div class="tab-pane" id="tab-signals-info">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Signal Metadata &nbsp;<span class="badge badge--neutral">GET /signals/available</span></h2>
+        <span style="font-size:12px;color:var(--muted)">Called once on startup. Writable signals (blue) can be written via PUT /signals/&#123;name&#125;</span>
+      </div>
+      <table class="data-table" id="signals-info-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Unit</th><th>Min</th><th>Max</th>
+            <th>Writable</th><th>Description</th><th>States</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- API LOG -->
+  <div class="tab-pane" id="tab-api-log">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>API Call Log</h2>
+          <p style="color:var(--muted);font-size:12px;margin-top:2px">Click any row to expand REQUEST / RESPONSE body</p>
+        </div>
+        <button class="btn" id="btn-clear-log">Clear</button>
+      </div>
+      <div id="api-log" class="api-log"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Profile modal ─────────────────────────────────────────────────────────── -->
+<div class="modal-backdrop hidden" id="profile-modal-backdrop">
+  <div class="modal">
+    <h3 id="profile-modal-title">New Profile</h3>
+    <form id="profile-form">
+      <div class="form-group">
+        <label>Profile Name</label>
+        <input type="text" id="pf-name" class="input" placeholder="e.g. U3" required maxlength="32" />
+      </div>
+      <div class="form-group">
+        <label>Select Signals</label>
+        <div id="pf-signals-checks" class="check-grid"></div>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn" id="btn-cancel-profile">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="js/mock.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

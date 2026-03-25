@@ -1,0 +1,203 @@
+{
+    "mode": {
+        "datas": ["user", "dev"],
+        "back_end": "N/A",
+        "front_end": "change show mode to user or dev",
+        "description": "User mode: only show user signal, Dev mode: show all signal",
+        "api": false
+    },
+    "profile": {
+        "datas": ["Dev", "U0", "U1", "U2", "UN"],
+        "back_end": "Store user profile and signal control in BE",
+        "front_end": "CRUD user profile and signal control, and show signal based on user profile",
+        "description": "User profile is used to store user signal and signal control, and show signal based on user profile",
+        "api": true,
+        "endpoint": "GET /api/profile",
+        "available_mode": ["user"],
+        "method": ["GET", "POST", "PUT", "DELETE"],
+        "payload_example": {
+            "section_id": 123,
+            "note": "only update profile if section_id is same and increment, otherwise create new profile or deny update",
+            "profile_name": "U0",
+            "signals": [ "EngineSpeed", "EngineSpeed", "CoolantTemp", "HB_FL_ActivationLevel", "HB_FR_ActivationLevel"],
+            "selected": true
+        }
+    },
+    "profiles": {
+        "datas": ["Dev", "U0", "U1", "U2", "UN"],
+        "back_end": "Store user profile and signal control in BE",
+        "front_end": "CRUD user profile and signal control, and show signal based on user profile",
+        "description": "User profile is used to store user signal and signal control, and show signal based on user profile",
+        "api": true,
+        "endpoint": "GET /api/profiles",
+        "available_mode": ["user"],
+        "method": ["GET"],
+        "payload_example": {
+            "section_id": 123,
+            "profiles": [
+                {
+                    "profile_name": "U0",
+                    "signals": [ "EngineSpeed", "EngineSpeed", "CoolantTemp", "HB_FL_ActivationLevel", "HB_FR_ActivationLevel"]
+                },
+                {
+                    "profile_name": "U1",
+                    "signals": [ "EngineSpeed", "CoolantTemp"]
+                }
+            ]
+        }
+    },
+    "config": {
+        "datas": ["cfg1", "cfg2", "cfg3"],
+        "back_end": "Store config in BE",
+        "front_end": "Show and edit config in dev mode",
+        "description": "Config is used to store config for dev mode, and show and edit config in dev mode, apply for all profiles",
+        "api": true,
+        "endpoint": "GET /config",
+        "method": ["GET", "PUT"],
+        "available_mode": ["dev"],
+        "payload_example": {
+            "section_id": 123,
+            "note": "only update configs if section_id is same and increment section_id, otherwise create deny update",
+            "config_name": "high_load",
+            "sampling_rate": 100,
+            "RTSP_url": "rtsp://example.com/stream ??",
+            "WebRTC_url": "webrtc://example.com/stream ??",
+            "db_file": ["~/zf.dbc", "~/mec.dbc", "~/mec.a2l", "có nên upload remove file ở đây từ FE không, hay copy file vào thư mục của carpc ??"],
+            "selected": true
+        }
+    },
+    "configs": {
+        "datas": ["cfg1", "cfg2", "cfg3"],
+        "back_end": "Store config in BE",
+        "front_end": "Show and edit config in dev mode",
+        "description": "Config is used to store config for dev mode, and show and edit config in dev mode, apply for all profiles",
+        "api": true,
+        "endpoint": "GET /config",
+        "method": ["GET", "PUT"],
+        "available_mode": ["dev"],
+        "payload_example": {
+            "section_id": 123,
+            "configs": [
+                {
+                    "config_name": "high_load",
+                    "sampling_rate": 100,
+                    "RTSP_url": "rtsp://example.com/stream ??",
+                    "WebRTC_url": "webrtc://example.com/stream ??",
+                    "db_file": ["~/zf.dbc", "~/mec.dbc", "~/mec.a2l", "có nên upload remove file ở đây từ FE không, hay copy file vào thư mục của carpc ??"],
+                    "selected": true
+                },
+                {
+                    "config_name": "low_load",
+                    "sampling_rate": 10,
+                    "RTSP_url": "rtsp://example.com/stream ??",
+                    "WebRTC_url": "webrtc://example.com/stream ??",
+                    "db_file": ["~/zf.dbc", "~/mec.dbc", "~/mec.a2l", "có nên upload remove file ở đây từ FE không, hay copy file vào thư mục của carpc ??"],
+                    "selected": false
+                }
+            ]
+        }
+    },
+    "signals": {
+        "datas": ["EngineSpeed", "CoolantTemp", "HB_FL_ActivationLevel", "HB_FR_ActivationLevel"],
+        "back_end": "WebSocket",
+        "front_end": "Show signal based on user profile and config",
+        "description": "Show signal based on user profile and config, and update signal in real time through WebSocket",
+        "api": true,
+        "endpoint": "GET /signals",
+        "available_mode": ["user" , "dev"],
+        "method": ["GET"],
+        "payload_example": {
+            "timestamp": "2024-06-01T12:00:00Z",
+            "signals": [ 
+                {
+                    "name": "EngineSpeed",
+                    "value": 3000
+                },
+                {
+                    "name": "CoolantTemp",
+                    "value": 90
+                }
+            ]
+        }
+    },
+    "signals_info": {
+        "datas": ["EngineSpeed", "CoolantTemp", "HB_FL_ActivationLevel", "HB_FR_ActivationLevel"],
+        "back_end": "WebSocket",
+        "front_end": "Show signal based on user profile and config",
+        "description": "Show signal based on user profile and config, and update signal in real time through WebSocket",
+        "api": true,
+        "endpoint": "GET /signals/available",
+        "available_mode": ["user" , "dev"],
+        "method": ["GET"],
+        "payload_example": {
+            "signals_info": [ 
+                {
+                    "name": "EngineSpeed",
+                    "values": null,
+                    "unit": "rpm",
+                    "min": 0,
+                    "max": 8000,
+                    "description": "Engine speed in revolutions per minute",
+                    "states": []
+                },
+                {
+                    "name": "CoolantTemp",
+                    "values": null,
+                    "unit": "°C",
+                    "min": 0,
+                    "max": 120,
+                    "description": "Coolant temperature in degree Celsius",
+                    "states": []
+                },
+                {
+                    "name": "HB_FL_ActivationLevel",
+                    "values": null,
+                    "unit": "",
+                    "min": 0,
+                    "max": 7,
+                    "description": "HB FL Activation Level in percentage",
+                    "states": [
+                        { "value": 0, "description": "Level 1"},
+                        { "value": 1, "description": "Level 2"},
+                        { "value": 2, "description": "Level 3"},
+                        { "value": 3, "description": "Level 4"},
+                        { "value": 4, "description": "Level 5"},
+                        { "value": 5, "description": "Level 6"},
+                        { "value": 6, "description": "Level 7"},
+                        { "value": 7, "description": "Level 8"}
+                    ]
+                }
+            ]
+        }
+    },
+    "signal_update": {
+        "datas": ["EngineSpeed", "CoolantTemp", "HB_FL_ActivationLevel", "HB_FR_ActivationLevel"],
+        "back_end": "CAN writer (via PUT /signals/{signal_name})",
+        "front_end": "UI should call per-signal write endpoint for writable signals",
+        "description": "changed control signal value",
+        "api": true,
+        "endpoint": "PUT /signals/{signal_name}",
+        "available_mode": ["user" , "dev"],
+        "method": ["PUT"],
+        "payload_example": {
+            "timestamp": "2024-06-01T12:00:00Z",
+            "name": "HB_FL_ActivationLevel",
+            "value": 1
+        }
+    },
+    "signal_sync": {
+        "datas": ["EngineSpeed", "CoolantTemp", "HB_FL_ActivationLevel", "HB_FR_ActivationLevel"],
+        "back_end": "CAN writer (via POST /signals/batch_update)",
+        "front_end": "UI should call batch update endpoint for writable signals",
+        "description": "synchronize control signal value",
+        "api": true,
+        "endpoint": "POST /signals/batch_update",
+        "available_mode": ["user" , "dev"],
+        "method": ["POST"],
+        "payload_example": {
+            "timestamp": "2024-06-01T12:00:00Z",
+            "name": "HB_FL_ActivationLevel",
+            "value": 1
+        }
+    }
+}

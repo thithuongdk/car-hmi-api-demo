@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CAN-HMI API Docs</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #232635;
+      --border: #2e3248;
+      --accent: #4f8ef7;
+      --green: #3dd68c;
+      --yellow: #f5c542;
+      --red: #f76f6f;
+      --purple: #b47cf7;
+      --muted: #6b7280;
+      --text: #e2e8f0;
+      --text-dim: #94a3b8;
+      --get: #3dd68c;
+      --post: #4f8ef7;
+      --put: #f5c542;
+      --delete: #f76f6f;
+      --ws: #b47cf7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout ── */
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 240px;
+      min-width: 240px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 24px 0;
+    }
+    .content {
+      flex: 1;
+      max-width: 860px;
+      padding: 40px 48px;
+      overflow-x: hidden;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar-logo {
+      padding: 0 20px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .sidebar-logo .name { font-weight: 700; font-size: 15px; }
+    .sidebar-logo .tag {
+      font-size: 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: var(--muted);
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .sidebar-section {
+      padding: 6px 20px 2px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 12px;
+    }
+    .sidebar a {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 20px;
+      border-radius: 0;
+      color: var(--text-dim);
+      font-size: 13px;
+      transition: background .15s, color .15s;
+    }
+    .sidebar a:hover, .sidebar a.active {
+      background: var(--surface2);
+      color: var(--text);
+      text-decoration: none;
+    }
+    .method-pill {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      letter-spacing: .04em;
+      flex-shrink: 0;
+    }
+    .pill-get    { background: #1a3d2c; color: var(--get);    }
+    .pill-post   { background: #1a2a4a; color: var(--post);   }
+    .pill-put    { background: #3d3010; color: var(--put);    }
+    .pill-delete { background: #3d1010; color: var(--delete); }
+    .pill-ws     { background: #2a1a4a; color: var(--ws);     }
+
+    /* ── Sections ── */
+    section { margin-bottom: 60px; }
+    .section-title {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-desc { color: var(--text-dim); margin-bottom: 28px; font-size: 13px; }
+
+    /* ── Endpoint card ── */
+    .endpoint {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .endpoint-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 20px;
+      cursor: pointer;
+      user-select: none;
+      transition: background .15s;
+    }
+    .endpoint-header:hover { background: var(--surface2); }
+    .endpoint-url {
+      font-family: 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 13px;
+      color: var(--text);
+      flex: 1;
+    }
+    .mode-badges { display: flex; gap: 6px; }
+    .mode-badge {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 99px;
+      font-weight: 600;
+    }
+    .mb-user { background: #1a3d2c; color: var(--green); }
+    .mb-dev  { background: #2a1a4a; color: var(--purple); }
+    .chevron { color: var(--muted); transition: transform .2s; font-size: 12px; }
+    .endpoint.open .chevron { transform: rotate(90deg); }
+
+    .endpoint-body {
+      display: none;
+      border-top: 1px solid var(--border);
+      padding: 20px;
+    }
+    .endpoint.open .endpoint-body { display: block; }
+
+    .ep-desc { color: var(--text-dim); margin-bottom: 16px; font-size: 13px; }
+
+    /* ── Code blocks ── */
+    .code-block {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px 16px;
+      font-family: 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      overflow-x: auto;
+      white-space: pre;
+      color: #a8b8d8;
+    }
+    .code-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+      margin-top: 14px;
+    }
+    .code-label:first-child { margin-top: 0; }
+
+    /* JSON syntax highlight */
+    .j-key    { color: #7eb8f7; }
+    .j-str    { color: #98e0a8; }
+    .j-num    { color: #f5c542; }
+    .j-bool   { color: #f47ef7; }
+    .j-null   { color: var(--muted); }
+
+    /* ── Info box ── */
+    .info-box {
+      background: #162035;
+      border: 1px solid #2a4060;
+      border-left: 3px solid var(--accent);
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-bottom: 20px;
+    }
+    .info-box strong { color: var(--text); }
+    .warn-box {
+      background: #20180a;
+      border: 1px solid #5a3c10;
+      border-left: 3px solid var(--yellow);
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-bottom: 20px;
+    }
+    .warn-box strong { color: var(--yellow); }
+
+    /* ── Tables ── */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      background: var(--surface2);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-dim);
+      vertical-align: top;
+    }
+    td code {
+      font-family: monospace;
+      background: var(--surface2);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 12px;
+      color: var(--text);
+    }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Signals table ── */
+    .signal-table-wrap {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      margin-bottom: 48px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+    .hero p { color: var(--text-dim); font-size: 15px; margin-bottom: 16px; }
+    .hero-links { display: flex; gap: 12px; flex-wrap: wrap; }
+    .hero-link {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      background: var(--surface);
+      transition: border-color .15s, color .15s;
+    }
+    .hero-link:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+    .hero-link.primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .hero-link.primary:hover { opacity: .88; color: #fff; }
+
+    /* ── WS ── */
+    .ws-endpoint {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--ws);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+    }
+    .ws-url {
+      font-family: monospace;
+      font-size: 13px;
+      color: var(--ws);
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 700px) {
+      .sidebar { display: none; }
+      .content { padding: 24px 16px; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <span class="name">🚗 CAN-HMI</span>
+      <span class="tag">MOCK API</span>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">API Reference v1.0</div>
+    </div>
+
+    <div class="sidebar-section">Overview</div>
+    <a href="#overview">Introduction</a>
+    <a href="#modes">Modes &amp; Profiles</a>
+    <a href="#section-id">section_id Locking</a>
+    <a href="#signals-list">Signal Catalogue</a>
+
+    <div class="sidebar-section">Profiles</div>
+    <a href="#ep-profiles"><span class="method-pill pill-get">GET</span> /api/profiles</a>
+    <a href="#ep-profile-get"><span class="method-pill pill-get">GET</span> /api/profile</a>
+    <a href="#ep-profile-post"><span class="method-pill pill-post">POST</span> /api/profile</a>
+    <a href="#ep-profile-put"><span class="method-pill pill-put">PUT</span> /api/profile</a>
+    <a href="#ep-profile-delete"><span class="method-pill pill-delete">DEL</span> /api/profile/:name</a>
+
+    <div class="sidebar-section">Config</div>
+    <a href="#ep-configs"><span class="method-pill pill-get">GET</span> /configs</a>
+    <a href="#ep-config-get"><span class="method-pill pill-get">GET</span> /config</a>
+    <a href="#ep-config-put"><span class="method-pill pill-put">PUT</span> /config</a>
+
+    <div class="sidebar-section">Signals</div>
+    <a href="#ep-signals"><span class="method-pill pill-get">GET</span> /signals</a>
+    <a href="#ep-signals-available"><span class="method-pill pill-get">GET</span> /signals/available</a>
+    <a href="#ep-signal-update"><span class="method-pill pill-put">PUT</span> /signals/:name</a>
+    <a href="#ep-signal-batch"><span class="method-pill pill-post">POST</span> /signals/batch_update</a>
+
+    <div class="sidebar-section">WebSocket</div>
+    <a href="#ep-ws"><span class="method-pill pill-ws">WS</span> /ws/signals</a>
+
+    <div style="padding:20px;margin-top:auto;border-top:1px solid var(--border);margin-top:16px">
+      <a href="/" style="font-size:12px;color:var(--muted)">← Back to Demo</a>
+    </div>
+  </nav>
+
+  <!-- ── Content ── -->
+  <main class="content">
+
+    <!-- Hero -->
+    <div class="hero" id="overview">
+      <h1>CAN-HMI API Reference</h1>
+      <p>Mock REST + WebSocket contract cho Car HMI demo. Toàn bộ API được simulate bằng JS + localStorage — không cần backend thật.</p>
+      <div class="hero-links">
+        <a class="hero-link primary" href="/">Live Demo →</a>
+        <a class="hero-link" href="https://github.com" target="_blank">GitHub</a>
+      </div>
+    </div>
+
+    <!-- ── Modes & Profiles ── -->
+    <section id="modes">
+      <div class="section-title">Modes &amp; Profiles</div>
+      <div class="section-desc">App hoạt động ở một trong hai mode. Mode ảnh hưởng tới tab nào hiển thị và API nào FE có thể gọi.</div>
+
+      <table>
+        <thead>
+          <tr><th>Mode</th><th>Hiển thị</th><th>Tabs accessible</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="mode-badge mb-user">User</span></td>
+            <td>Chỉ signals thuộc active profile</td>
+            <td>Dashboard, Profiles, API Log</td>
+          </tr>
+          <tr>
+            <td><span class="mode-badge mb-dev">Dev</span></td>
+            <td>Tất cả signals</td>
+            <td>Dashboard, Profiles, <strong>Config</strong>, <strong>Signals Info</strong>, API Log</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="margin-top:16px" class="info-box">
+        <strong>Profile values:</strong> <code>Dev</code>, <code>U0</code>, <code>U1</code>, <code>U2</code>, <code>UN</code> — Dev profile là default, hiển thị tất cả signals.
+      </div>
+    </section>
+
+    <!-- ── section_id ── -->
+    <section id="section-id">
+      <div class="section-title">section_id — Optimistic Locking</div>
+      <div class="section-desc">Cơ chế tránh ghi đè xung đột giữa nhiều client.</div>
+
+      <div class="warn-box">
+        <strong>⚠ Bắt buộc</strong> với mọi request <code>PUT /api/profile</code> và <code>PUT /config</code>.
+      </div>
+
+      <table>
+        <thead><tr><th>Hành động</th><th>Mô tả</th></tr></thead>
+        <tbody>
+          <tr><td>Client gửi <code>PUT</code></td><td>Phải kèm <code>section_id</code> bằng giá trị hiện tại từ server.</td></tr>
+          <tr><td>Server match</td><td>Ghi thành công → trả về data mới với <code>section_id + 1</code>.</td></tr>
+          <tr><td>Server mismatch</td><td>Từ chối → <strong>409 Conflict</strong>. Client cần GET lại rồi retry.</td></tr>
+          <tr><td>Tạo mới (<code>POST</code>)</td><td><code>section_id</code> do server cấp, client không cần gửi.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ── Signal Catalogue ── -->
+    <section id="signals-list">
+      <div class="section-title">Signal Catalogue</div>
+      <div class="section-desc">Danh sách tất cả signals hiện có trong hệ thống.</div>
+      <div class="signal-table-wrap">
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Unit</th><th>Min</th><th>Max</th><th>Writable</th><th>States</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>EngineSpeed</code></td>
+              <td>rpm</td><td>0</td><td>8000</td>
+              <td style="color:var(--muted)">No</td>
+              <td>—</td>
+              <td>Engine speed in RPM</td>
+            </tr>
+            <tr>
+              <td><code>CoolantTemp</code></td>
+              <td>°C</td><td>0</td><td>120</td>
+              <td style="color:var(--muted)">No</td>
+              <td>—</td>
+              <td>Coolant temperature</td>
+            </tr>
+            <tr>
+              <td><code>HB_FL_ActivationLevel</code></td>
+              <td>—</td><td>0</td><td>7</td>
+              <td style="color:var(--green)">Yes</td>
+              <td>0→Level 1 … 7→Level 8</td>
+              <td>HB Front-Left activation level</td>
+            </tr>
+            <tr>
+              <td><code>HB_FR_ActivationLevel</code></td>
+              <td>—</td><td>0</td><td>7</td>
+              <td style="color:var(--green)">Yes</td>
+              <td>0→Level 1 … 7→Level 8</td>
+              <td>HB Front-Right activation level</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ════════════ PROFILES ════════════ -->
+    <section>
+      <div class="section-title">Profiles API</div>
+      <div class="section-desc">Quản lý user profiles — mỗi profile map tới tập hợp signals hiển thị trên Dashboard khi ở <span class="mode-badge mb-user">User</span> mode.</div>
+
+      <!-- GET /api/profiles -->
+      <div class="endpoint open" id="ep-profiles">
+        <div class="endpoint-header" onclick="toggle(this)">
+          <span class="method-pill pill-get">GET</span>
+          <span class="endpoint-url">/api/profiles</span>
+          <div class="mode-badges">
+            <span class="mode-badge mb-user">User</span>
+          </div>
+          <span class="chevron">▶</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="ep-desc">Trả về danh sách tất cả profiles đã lưu.</p>
+          <div class="code-label">Response 200</div>
+          <div class="code-block"><span class="j-key">"section_id"</span>: <span class="j-num">123</span>,
+<span class="j-key">"profiles"</span>: [
+  {
+    <span class="j-key">"profile_name"</span>: <span class="j-str">"U0"</span>,
+    <span class="j-key">"signals"</span>: [<span class="j-str">"EngineSpeed"</span>, <span class="j-str">"CoolantTemp"</span>, <span class="j-str">"HB_FL_ActivationLevel"</span>]
+  },
+  {
+    <span class="j-key">"profile_name"</span>: <span class="j-str">"U1"</span>,
+    <span class="j-key">"signals"</span>: [<span class="j-str">"EngineSpeed"</span>, <span class="j-str">"CoolantTemp"</span>]
+  }
+]</div>
+        </div>
+      </div>
+
+      <!-- GET /api/profile -->
+      <div class="endpoint" id="ep-profile-get">
+        <div class="endpoint-header" onclick="toggle(this)">
+          <span class="method-pill pill-get">GET</span>
+          <span class="endpoint-url">/api/profile?name={profile_name}</span>
+          <div class="mode-badges">
+            <span class="mode-badge mb-user">User</span>
+          </div>
+          <span class="chevron">▶</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="ep-desc">Lấy thông tin một profile theo tên.</p>
+          <div class="code-label">Query Params</div>
+          <div class="code-block"><span class="j-key">name</span>  string  — Profile name, e.g. <span class="j-str">"U0"</span></div>
+          <div class="code-label">Response 200</div>
+          <div class="code-block">{
+  <span class="j-key">"section_id"</span>: <span class="j-num">123</span>,
+  <span class="j-key">"profile_name"</span>: <span class="j-str">"U0"</span>,
+  <span class="j-key">"signals"</span>: [<span class="j-str">"EngineSpeed"</span>, <span class="j-str">"CoolantTemp"</span>, <span class="j-str">"HB_FL_ActivationLevel"</span>],
+  <span class="j-key">"selected"</span>: <span class="j-bool">true</span>
+}</div>
+        </div>
+      </div>
+
+      <!-- POST /api/profile -->
+      <div class="endpoint" id="ep-profile-post">
+        <div class="endpoint-header" onclick="toggle(this)">
+          <span class="method-pill pill-post">POST</span>
+          <span class="endpoint-url">/api/profile</span>
+          <div class="mode-badges">
+            <span class="mode-badge mb-user">User</span>
+          </div>
+          <span class="chevron">▶</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="ep-desc">Tạo mới một profile.</p>
+          <div class="code-label">Request Body</div>
+          <div class="code-block">{
+  <span class="j-key">"profile_name"</span>: <span class="j-str">"U2"</span>,
+  <span class="j-key">"signals"</span>: [<span class="j-str">"EngineSpeed"</span>, <span class="j-str">"HB_FL_ActivationLevel"</span>],
+  <span class="j-key">"selected"</span>: <span class="j-bool">false</span>
+}</div>
+          <div class="code-label">Response 201</div>
+          <div class="code-block">{
+  <span class="j-key">"section_id"</span>: <span class="j-num">1</span>,
+  <span class="j-key">"profile_name"</span>: <span class="j-str">"U2"</span>,
+  <span class="j-key">"signals"</span>: [<span class="j-str">"EngineSpeed"</span>, <span class="j-str">"HB_FL_ActivationLevel"</span>],
+  <span class="j-key">"selected"</span>: <span class="j-bool">false</span>
+}</div>
+        </div>
+      </div>
+
+      <!-- PUT /api/profile -->
+      <div class="endpoint" id="ep-profile-put">
+        <div class="endpoint-header" onclick="toggle(this)">
+          <span class="method-pill pill-put">PUT</span>
+          <span class="endpoint-url">/api/profile</span>
+          <div class="mode-badges">
+            <span class="mode-badge mb-user">User</span>
+          </div>
+          <span class="chevron">▶</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="ep-desc">Cập nhật profile. Yêu cầu <code>section_id</code> khớp với giá trị hiện tại — xem <a href="#section-id">Optimistic Locking</a>.</p>
+          <div class="code-label">Request Body</div>
+          <div class="code-block">{
+  <span class="j-key">"section_id"</span>: <span class="j-num">123</span>,
+  <span class="j-key">"profile_name"</span>: <span class="j-str">"U0"</span>,
+  <span class="j-key">"signals"</span>: [<span class="j-str">"EngineSpeed"</span>, <span class="j-str">"CoolantTemp"</span>, <span class="j-str">"HB_FL_ActivationLevel"</span>, <span class="j-str">"HB_FR_ActivationLevel"</span>],
+  <span class="j-key">"selected"</span>: <span class="j-bool">true</span>
+}</div>
+          <div class="code-label">Response 200</div>
+          <div class="code-block">{ <span class="j-key">"section_id"</span>: <span class="j-num">124</span>, <span class="j-key">"profile_name"</span>: <span class="j-str">"U0"</span>, ... }</div>
+          <div class="code-label">Response 409 — section_id mismatch</div>
+          <div class="code-block">{ <span class="j-key">"error"</span>: <span class="j-str">"Conflict: section_id mismatch"</span>, <span class="j-key">"current_section_id"</span>: <span class="j-num">124</span> }</div>
+        </div>
+      </div>
+
+      <!-- DELETE /api/profile/:name -->
+      <div class="endpoint" id="ep-profile-delete">
+        <div class="endpoint-header" onclick="toggle(this)">
+          <span class="method-pill pill-delete">DEL</span>
+          <span class="endpoint-url">/api/profile/{profile_name}</span>
+          <div class="mode-badges">
+            <span class="mode-badge mb-user">User</span>
+          </div>
+          <span class="chevron">▶</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="ep-desc">Xoá profile theo tên.</p>
+          <div class="code-label">Response 204</div>
+          <div class="code-block"><span class="j-null">(no body)</span></div>
+          <div class="code-label">Response 404</div>
+          <div class="code-block">{ <span class="j-key">"error"</span>: <span class="j-str">"Profile not found"</span> }</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════ CONFIG ════════════ -->
+    <section>
+      <div class="section-title">Config API <span class="mode-badge mb-dev" style="font-size:13px;vertical-align:middle;margin-left:6px">Dev Only</span></div>
+      <div class="section-desc">Quản lý cấu hình hệ thống — sampling rate, RTSP/WebRTC URL, DBC files. Chỉ truy cập ở Dev mode.</div>
+
+      <!-- GET /configs -->
+      <div class="endpoint" id="ep-configs">
+        <div class="endpoint-header" onclick="toggle(this)">
+          <span class="method-pill pill-get">GET</span>
+          <span class="endpoint-url">/configs</span>
+          <div class="mode-badges">
+            <span class="mode-badge mb-dev">Dev</span>
+          </div>
+          <span class="chevron">▶</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="ep-desc">Trả về danh sách tất cả configs đã lưu.</p>
+          <div class="code-label">Response 200</div>
+          <div class="code-block">{
+  <span class="j-key">"section_id"</span>: <span class="j-num">123</span>,
+  <span class="j-key">"configs"</span>: [
+    {
+      <span class="j-key">"config_name"</span>: <span class="j-str">"high_load"</span>,
+      <span class="j-key">"sampling_rate"</span>: <span class="j-num">100</span>,
+      <span class="j-key">"RTSP_url"</span>: <span class="j-str">"rtsp://example.com/stream"</span>,
+      <span class="j-key">"WebRTC_url"</span>: <span class="j-str">"webrtc://example.com/stream"</span>,
+      <span class="j-key">"db_file"</span>: [<span class="j-str">"~/zf.dbc"</span>, <span class="j-str">"~/mec.dbc"</span>],
+      <span class="j-key">"selected"</span>: <span class="j-bool">true</span>
+    },
+    {
+      <span class="j-key">"config_name"</span>: <span class="j-str">"low_load"</span>,
+      <span class="j-key">"sampling_rate"</span>: <span class="j-num">10</span>,
+      <span class="j-key">"RTSP_url"</span>: <span class="j-str">"rtsp://example.com/stream"</span>,
+      <span class="j-key">"WebRTC_url"</span>: <span class="j-str">"webrtc://example.com/stream"</span>,
+      <span class="j-key">"db_file"</span>: [<span class="j-str">"~/zf.dbc"</span>],
+      <span class="j-key">"selected"</span>: <span class="j-bool">false</span>
+    }
+  ]
+}</div>
+        </div>
+      </div>
+
+      <!-- GET /config -->
+      <div class="endpoint" id="ep-config-get">
+        <div class="endpoint-header" onclick="toggle(this)">
+          <span class="method-pill pill-get">GET</span>
+          <span class="endpoint-url">/config</span>
+          <div class="mode-badges">
+            <span class="mode-badge mb-dev">Dev</span>
+          </div>
+          <span class="chevron">▶</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="ep-desc">Lấy config đang được active (<code>selected: true</code>).</p>
+          <div class="code-label">Response 200</div>
+          <div class="code-block">{
+  <span class="j-key">"section_id"</span>: <span class="j-num">123</span>,
+  <span class="j-key">"config_name"</span>: <span class="j-str">"high_load"</span>,
+  <span class="j-key">"sampling_rate"</span>: <span class="j-num">100</span>,
+  <span class="j-key">"RTSP_url"</span>: <span class="j-str">"rtsp://example.com/stream"</span>,
+  <span class="j-key">"WebRTC_url"</span>: <span class="j-str">"webrtc://example.com/stream"</span>,
+  <span class="j-key">"db_file"</span>: [<span class="j-str">"~/zf.dbc"</span>, <span class="j-str">"~/mec.dbc"</span>, <span class="j-str">"~/mec.a2l"</span>],
+  <span class="j-key">"selected"</span>: <span class="j-bool">true</span>
+}</div>
+        </div>
+      </div>
+
+      <!-- PUT /config -->
+      <div class="endpoint" id="ep-config-put">
+        <div class="endpoint-header" onclick="toggle(this)">
+          <span class="method-pill pill-put">PUT</span>
+          <span class="endpoint-url">/config</span>
+          <div class="mode-badges">
+            <span class="mode-badge mb-dev">Dev</span>
+          </div>
+          <span class="chevron">▶</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="ep-desc">Cập nhật config. Yêu cầu <code>section_id</code> khớp — xem <a href="#section-id">Optimistic Locking</a>.</p>
+          <div class="code-label">Request Body</div>
+          <div class="code-block">{
+  <span class="j-key">"section_id"</span>: <span class="j-num">123</span>,
+  <span class="j-key">"config_name"</span>: <span class="j-str">"high_load"</span>,
+  <span class="j-key">"sampling_rate"</span>: <span class="j-num">100</span>,
+  <span class="j-key">"RTSP_url"</span>: <span class="j-str">"rtsp://example.com/stream"</span>,
+  <span class="j-key">"WebRTC_url"</span>: <span class="j-str">"webrtc://example.com/stream"</span>,
+  <span class="j-key">"db_file"</span>: [<span class="j-str">"~/zf.dbc"</span>, <span class="j-str">"~/mec.dbc"</span>],
+  <span class="j-key">"selected"</span>: <span class="j-bool">true</span>
+}</div>
+          <div class="code-label">Response 200</div>
+          <div class="code-block">{ <span class="j-key">"section_id"</span>: <span class="j-num">124</span>, <span class="j-key">"config_name"</span>: <span class="j-str">"high_load"</span>, ... }</div>
+          <div class="code-label">Response 409 — section_id mismatch</div>
+          <div class="code-block">{ <span class="j-key">"error"</span>: <span class="j-str">"Conflict: section_id mismatch"</span>, <span class="j-key">"current_section_id"</span>: <span class="j-num">124</span> }</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════ SIGNALS ════════════ -->
+    <section>
+      <div class="section-title">Signals API</div>
+      <div class="section-desc">Đọc giá trị signals realtime và ghi các writable signals. Có ở cả User và Dev mode.</div>
+
+      <!-- GET /signals -->
+      <div class="endpoint" id="ep-signals">
+        <div class="endpoint-header" onclick="toggle(this)">
+          <span class="method-pill pill-get">GET</span>
+          <span class="endpoint-url">/signals</span>
+          <div class="mode-badges">
+            <span class="mode-badge mb-user">User</span>
+            <span class="mode-badge mb-dev">Dev</span>
+          </div>
+          <span class="chevron">▶</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="ep-desc">Snapshot giá trị hiện tại của tất cả signals. Dùng cho initial load; sau đó dùng WebSocket để nhận updates.</p>
+          <div class="code-label">Response 200</div>
+          <div class="code-block">{
+  <span class="j-key">"timestamp"</span>: <span class="j-str">"2024-06-01T12:00:00Z"</span>,
+  <span class="j-key">"signals"</span>: [
+    { <span class="j-key">"name"</span>: <span class="j-str">"EngineSpeed"</span>,  <span class="j-key">"value"</span>: <span class="j-num">3000</span> },
+    { <span class="j-key">"name"</span>: <span class="j-str">"CoolantTemp"</span>,  <span class="j-key">"value"</span>: <span class="j-num">90</span>   },
+    { <span class="j-key">"name"</span>: <span class="j-str">"HB_FL_ActivationLevel"</span>, <span class="j-key">"value"</span>: <span class="j-num">2</span> },
+    { <span class="j-key">"name"</span>: <span class="j-str">"HB_FR_ActivationLevel"</span>, <span class="j-key">"value"</span>: <span class="j-num">0</span> }
+  ]
+}</div>
+        </div>
+      </div>
+
+      <!-- GET /signals/available -->
+      <div class="endpoint" id="ep-signals-available">
+        <div class="endpoint-header" onclick="toggle(this)">
+          <span class="method-pill pill-get">GET</span>
+          <span class="endpoint-url">/signals/available</span>
+          <div class="mode-badges">
+            <span class="mode-badge mb-user">User</span>
+            <span class="mode-badge mb-dev">Dev</span>
+          </div>
+          <span class="chevron">▶</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="ep-desc">Full metadata của tất cả signals — unit, min, max, writable, states enum. Gọi một lần on startup.</p>
+          <div class="code-label">Response 200</div>
+          <div class="code-block">{
+  <span class="j-key">"signals_info"</span>: [
+    {
+      <span class="j-key">"name"</span>: <span class="j-str">"EngineSpeed"</span>,
+      <span class="j-key">"unit"</span>: <span class="j-str">"rpm"</span>,
+      <span class="j-key">"min"</span>: <span class="j-num">0</span>,
+      <span class="j-key">"max"</span>: <span class="j-num">8000</span>,
+      <span class="j-key">"description"</span>: <span class="j-str">"Engine speed in revolutions per minute"</span>,
+      <span class="j-key">"states"</span>: [],
+      <span class="j-key">"values"</span>: <span class="j-null">null</span>
+    },
+    {
+      <span class="j-key">"name"</span>: <span class="j-str">"HB_FL_ActivationLevel"</span>,
+      <span class="j-key">"unit"</span>: <span class="j-str">""</span>,
+      <span class="j-key">"min"</span>: <span class="j-num">0</span>,
+      <span class="j-key">"max"</span>: <span class="j-num">7</span>,
+      <span class="j-key">"description"</span>: <span class="j-str">"HB FL Activation Level"</span>,
+      <span class="j-key">"states"</span>: [
+        { <span class="j-key">"value"</span>: <span class="j-num">0</span>, <span class="j-key">"description"</span>: <span class="j-str">"Level 1"</span> },
+        { <span class="j-key">"value"</span>: <span class="j-num">1</span>, <span class="j-key">"description"</span>: <span class="j-str">"Level 2"</span> },
+        <span class="j-null">... (8 states total: Level 1–8 for values 0–7)</span>
+      ],
+      <span class="j-key">"values"</span>: <span class="j-null">null</span>
+    }
+  ]
+}</div>
+        </div>
+      </div>
+
+      <!-- PUT /signals/:name -->
+      <div class="endpoint" id="ep-signal-update">
+        <div class="endpoint-header" onclick="toggle(this)">
+          <span class="method-pill pill-put">PUT</span>
+          <span class="endpoint-url">/signals/{signal_name}</span>
+          <div class="mode-badges">
+            <span class="mode-badge mb-user">User</span>
+            <span class="mode-badge mb-dev">Dev</span>
+          </div>
+          <span class="chevron">▶</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="ep-desc">Ghi giá trị cho một writable signal. BE sẽ forward xuống CAN writer. Chỉ áp dụng cho <code>HB_FL_ActivationLevel</code>, <code>HB_FR_ActivationLevel</code>.</p>
+          <div class="code-label">Request Body</div>
+          <div class="code-block">{
+  <span class="j-key">"timestamp"</span>: <span class="j-str">"2024-06-01T12:00:00Z"</span>,
+  <span class="j-key">"name"</span>: <span class="j-str">"HB_FL_ActivationLevel"</span>,
+  <span class="j-key">"value"</span>: <span class="j-num">3</span>
+}</div>
+          <div class="code-label">Response 202 Accepted</div>
+          <div class="code-block">{ <span class="j-key">"status"</span>: <span class="j-str">"queued"</span> }</div>
+          <div class="code-label">Response 400 — signal not writable or out of range</div>
+          <div class="code-block">{ <span class="j-key">"error"</span>: <span class="j-str">"Signal is not writable"</span> }</div>
+        </div>
+      </div>
+
+      <!-- POST /signals/batch_update -->
+      <div class="endpoint" id="ep-signal-batch">
+        <div class="endpoint-header" onclick="toggle(this)">
+          <span class="method-pill pill-post">POST</span>
+          <span class="endpoint-url">/signals/batch_update</span>
+          <div class="mode-badges">
+            <span class="mode-badge mb-user">User</span>
+            <span class="mode-badge mb-dev">Dev</span>
+          </div>
+          <span class="chevron">▶</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="ep-desc">Ghi đồng thời nhiều writable signals trong một request (sync/bulk write).</p>
+          <div class="code-label">Request Body</div>
+          <div class="code-block">{
+  <span class="j-key">"timestamp"</span>: <span class="j-str">"2024-06-01T12:00:00Z"</span>,
+  <span class="j-key">"updates"</span>: [
+    { <span class="j-key">"name"</span>: <span class="j-str">"HB_FL_ActivationLevel"</span>, <span class="j-key">"value"</span>: <span class="j-num">3</span> },
+    { <span class="j-key">"name"</span>: <span class="j-str">"HB_FR_ActivationLevel"</span>, <span class="j-key">"value"</span>: <span class="j-num">5</span> }
+  ]
+}</div>
+          <div class="code-label">Response 202 Accepted</div>
+          <div class="code-block">{ <span class="j-key">"status"</span>: <span class="j-str">"queued"</span>, <span class="j-key">"count"</span>: <span class="j-num">2</span> }</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════ WEBSOCKET ════════════ -->
+    <section>
+      <div class="section-title">WebSocket</div>
+      <div class="section-desc">Realtime signal stream — BE push data theo <code>sampling_rate</code> của active config.</div>
+
+      <div class="ws-endpoint" id="ep-ws">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <span class="method-pill pill-ws">WS</span>
+          <span class="ws-url">ws://&lt;host&gt;/ws/signals</span>
+          <div class="mode-badges" style="margin-left:auto">
+            <span class="mode-badge mb-user">User</span>
+            <span class="mode-badge mb-dev">Dev</span>
+          </div>
+        </div>
+        <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px">
+          Kết nối WebSocket để nhận signal updates theo thời gian thực. Interval giữa các frame = <code>1000 / sampling_rate</code> ms.
+        </p>
+        <div class="code-label">Server → Client message</div>
+        <div class="code-block">{
+  <span class="j-key">"timestamp"</span>: <span class="j-str">"2024-06-01T12:00:00.123Z"</span>,
+  <span class="j-key">"signals"</span>: [
+    { <span class="j-key">"name"</span>: <span class="j-str">"EngineSpeed"</span>,  <span class="j-key">"value"</span>: <span class="j-num">3150</span> },
+    { <span class="j-key">"name"</span>: <span class="j-str">"CoolantTemp"</span>,  <span class="j-key">"value"</span>: <span class="j-num">91</span>   },
+    { <span class="j-key">"name"</span>: <span class="j-str">"HB_FL_ActivationLevel"</span>, <span class="j-key">"value"</span>: <span class="j-num">2</span> },
+    { <span class="j-key">"name"</span>: <span class="j-str">"HB_FR_ActivationLevel"</span>, <span class="j-key">"value"</span>: <span class="j-num">0</span> }
+  ]
+}</div>
+      </div>
+
+      <div class="info-box">
+        <strong>sampling_rate</strong> được lấy từ active config. Thay đổi config → WS reconnect với interval mới.
+      </div>
+    </section>
+
+    <div style="color:var(--muted);font-size:12px;padding-top:20px;border-top:1px solid var(--border)">
+      Generated from <code>BE-FE-Review.json</code> · CAN-HMI API Demo · 2026
+    </div>
+  </main>
+</div>
+
+<script>
+  function toggle(header) {
+    const card = header.parentElement;
+    card.classList.toggle('open');
+  }
+  // Smooth scroll & active sidebar link
+  document.querySelectorAll('.sidebar a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+</script>
+</body>
+</html>

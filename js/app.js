@@ -8,18 +8,28 @@
 const App = {
   mode: "dev",            // "user" | "dev"
   activeProfile: null,    // profile object
-  ws: null,               // MockWebSocket instance
+  ws: null,               // WebSocket / MockWebSocket instance
   signalsMeta: [],        // from GET /signals/available
   currentValues: {},      // { name: { value, timestamp } }
   _wsBadge: null,
+  sectionId: 1,           // tracks latest section_id from server
 };
+
+// Auto-detect real server vs local/static mock
+const _onRealServer = (
+  typeof location !== 'undefined' &&
+  !['localhost', '127.0.0.1', ''].includes(location.hostname) &&
+  location.protocol !== 'file:'
+);
+// Unified API — RealAPI when on server, MockAPI when local
+const API = _onRealServer ? RealAPI : MockAPI;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
   App._wsBadge = document.getElementById("ws-badge");
 
-  // Load signal.json into Store before any other init
-  await Store.init();
+  // Load signal.json into Store (only needed for mock; skip on real server)
+  if (!_onRealServer) await Store.init();
 
   _setupTabs();
   _setupModeToggle();
@@ -35,7 +45,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   _initDashboard();
   _connectWS();
   // Pre-load info so first tab click is instant
-  MockAPI.getInfo().then(_renderInfoPanel).catch(() => {});
+  API.getInfo().then(_renderInfoPanel).catch(() => {});
 });
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
@@ -74,18 +84,27 @@ function _applyMode() {
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 function _connectWS() {
-  if (App.ws) App.ws.close();
+  if (App.ws) { try { App.ws.close(); } catch (_) {} }
 
-  App.ws = new MockWebSocket("ws://localhost:8000/ws/signals");
+  let ws;
+  if (_onRealServer) {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/ws/signals`);
+  } else {
+    ws = new MockWebSocket('ws://localhost:8000/ws/signals');
+  }
+  App.ws = ws;
+
   App._wsBadge.textContent = "● WS";
   App._wsBadge.className = "badge badge--warn";
 
-  App.ws.onopen = () => {
+  ws.onopen = () => {
     App._wsBadge.textContent = "● WS Connected";
     App._wsBadge.className = "badge badge--ok";
+    if (_onRealServer) Log.ws('CONNECTED', location.host + '/ws/signals');
   };
 
-  App.ws.onmessage = (evt) => {
+  ws.onmessage = (evt) => {
     const payload = JSON.parse(evt.data);
     for (const sig of payload.signals) {
       App.currentValues[sig.name] = { value: sig.value, timestamp: payload.timestamp };
@@ -93,15 +112,22 @@ function _connectWS() {
     _updateSignalCards(payload.signals);
   };
 
-  App.ws.onclose = () => {
+  ws.onclose = () => {
     App._wsBadge.textContent = "● WS Disconnected";
+    App._wsBadge.className = "badge badge--dis";
+    // Auto-reconnect after 3s on real server
+    if (_onRealServer) setTimeout(_connectWS, 3000);
+  };
+
+  ws.onerror = () => {
+    App._wsBadge.textContent = "● WS Error";
     App._wsBadge.className = "badge badge--dis";
   };
 }
 
 // ── Signals metadata ─────────────────────────────────────────────────────────
 async function _loadSignalsMeta() {
-  const res = await MockAPI.getSignalsAvailable();
+  const res = await API.getSignalsAvailable();
   App.signalsMeta = res.signals_info;
   // seed currentValues from meta
   res.signals_info.forEach(s => {
@@ -206,7 +232,7 @@ function _buildSignalCard(meta) {
         value = parseFloat(card.querySelector(`.write-range[data-signal="${name}"]`).value);
       }
       try {
-        await MockAPI.updateSignal(name, value);
+        await API.updateSignal(name, value);
         App.currentValues[name] = { value, timestamp: Date.now() / 1000 };
         _updateCard(name);
       } catch (e) {
@@ -257,7 +283,8 @@ function _updateCard(name, v) {
 
 // ── Profiles ──────────────────────────────────────────────────────────────────
 async function _loadProfiles() {
-  const res = await MockAPI.getProfiles();
+  const res = await API.getProfiles();
+  App.sectionId = res.section_id;
   const sel = document.getElementById("profile-select");
   sel.innerHTML = "";
   res.profiles.forEach(p => {
@@ -268,7 +295,7 @@ async function _loadProfiles() {
     sel.appendChild(opt);
   });
   sel.addEventListener("change", async () => {
-    await MockAPI.selectProfile(sel.value);
+    await API.selectProfile(sel.value);
     await _loadProfiles();
     _renderDashboard();
   });
@@ -312,14 +339,14 @@ function _renderProfilesPanel(profiles, sectionId) {
 }
 
 App._selectProfile = async (name) => {
-  await MockAPI.selectProfile(name);
+  await API.selectProfile(name);
   await _loadProfiles();
   _renderDashboard();
 };
 
 App._editProfile = async (name) => {
   try {
-    const profile = await MockAPI.getProfile(name);
+    const profile = await API.getProfile(name);
     _openProfileModal(profile);
   } catch (e) { alert(e.message); }
 };
@@ -327,7 +354,7 @@ App._editProfile = async (name) => {
 App._deleteProfile = async (name) => {
   if (!confirm(`Delete profile "${name}"?`)) return;
   try {
-    await MockAPI.deleteProfile(name);
+    await API.deleteProfile(name);
     await _loadProfiles();
     _renderDashboard();
   } catch (e) { alert(e.message); }
@@ -348,10 +375,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!name) return alert("Profile name required");
     try {
       if (mode === "edit") {
-        const d = Store.get();
-        await MockAPI.updateProfile({ profile_name: name, signals, section_id: d.section_id });
+        await API.updateProfile({ profile_name: name, signals, section_id: App.sectionId });
       } else {
-        await MockAPI.createProfile({ profile_name: name, signals });
+        await API.createProfile({ profile_name: name, signals });
       }
       _closeProfileModal();
       await _loadProfiles();
@@ -448,8 +474,8 @@ function _closeProfileModal() {
 // ── Configs ───────────────────────────────────────────────────────────────────
 async function _loadConfigs() {
   const [infoRes, configRes] = await Promise.all([
-    MockAPI.getConfigs(),
-    MockAPI.getConfig(),
+    API.getConfigs(),
+    API.getConfig(),
   ]);
   _renderConfigsPanel(infoRes, configRes);
 }
@@ -562,7 +588,7 @@ App._saveConfigSection = async (sectionKey, sectionId) => {
     setDeep(nested, el.dataset.path, val);
   });
   try {
-    await MockAPI.updateConfig({ section_id: sectionId, [sectionKey]: nested });
+    await API.updateConfig({ section_id: App.sectionId, [sectionKey]: nested });
     await _loadConfigs();
   } catch (e) { alert(e.message); }
 };
@@ -646,7 +672,7 @@ function _buildLogEntry(e) {
 // ── System Info ───────────────────────────────────────────────────────────────
 async function _loadInfo() {
   try {
-    const info = await MockAPI.getInfo();
+    const info = await API.getInfo();
     _renderInfoPanel(info);
   } catch (e) {
     const el = document.getElementById("info-content");

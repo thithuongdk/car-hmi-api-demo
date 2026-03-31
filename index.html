@@ -12,7 +12,7 @@
 <header class="header">
   <div class="header-left">
     <span class="logo">🚗 CAN-HMI API Demo</span>
-    <span class="demo-tag">MOCK</span>
+    <span class="demo-tag" id="server-tag">MOCK</span>
   </div>
 
   <div class="header-center">
@@ -30,6 +30,9 @@
   </div>
 
   <div class="header-right">
+    <a href="/docs" class="btn btn-sm" target="_blank" title="Swagger API Docs">📄 API Docs</a>
+    <a href="/ws" class="btn btn-sm" target="_blank" title="WebSocket Docs">🔌 WS Docs</a>
+    <a href="/docs/errors" class="btn btn-sm" target="_blank" title="Error Codes">⚠️ Errors</a>
     <span id="ws-badge"  class="badge badge--warn">● WS</span>
     <span id="api-count" class="badge badge--neutral">0 calls</span>
     <button class="btn btn-sm" id="btn-reset" title="Reset all demo data to defaults">↺ Reset</button>

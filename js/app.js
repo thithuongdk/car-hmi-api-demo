@@ -31,6 +31,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Load signal.json into Store (only needed for mock; skip on real server)
   if (!_onRealServer) await Store.init();
 
+  // Update header tag to show LIVE vs MOCK
+  const tag = document.getElementById('server-tag');
+  if (tag) { tag.textContent = _onRealServer ? 'LIVE' : 'MOCK'; tag.style.background = _onRealServer ? '#166534' : ''; }
+
   _setupTabs();
   _setupModeToggle();
   _setupApiLog();

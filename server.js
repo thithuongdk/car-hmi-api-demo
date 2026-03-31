@@ -70,6 +70,23 @@ if (INFO_JSON) {
 // Deep-clone config so mutations don't touch the loaded object
 let CONFIG_DATA = CONFIG_JSON ? JSON.parse(JSON.stringify(CONFIG_JSON)) : null;
 
+function isTemperatureSignal(s) {
+  const unit = String(s?.unit || '').toLowerCase();
+  const name = String(s?.name || '').toLowerCase();
+  const desc = String(s?.description || '').toLowerCase();
+  return unit.includes('c') || name.includes('temp') || desc.includes('temp');
+}
+
+function effectiveRange(s) {
+  const baseMin = Number.isFinite(s?.min) ? s.min : 0;
+  const baseMax = Number.isFinite(s?.max) ? s.max : 100;
+  if (!isTemperatureSignal(s)) return { min: baseMin, max: baseMax };
+
+  const min = Math.max(baseMin, 20);
+  const max = Math.min(baseMax, 60);
+  return min <= max ? { min, max } : { min: baseMin, max: baseMax };
+}
+
 // Signal values - seeded with midpoint or random enum state
 const signalValues = {};
 SIGNALS_META.forEach(s => {
@@ -77,8 +94,10 @@ SIGNALS_META.forEach(s => {
   if (s.states.length) {
     initVal = s.states[Math.floor(Math.random() * s.states.length)].value;
   } else {
-    const mid = (s.min + s.max) / 2;
-    initVal = +(mid + (Math.random() - 0.5) * (s.max - s.min) * 0.4).toFixed(2);
+    const { min, max } = effectiveRange(s);
+    const mid = (min + max) / 2;
+    initVal = +(mid + (Math.random() - 0.5) * (max - min) * 0.4).toFixed(2);
+    initVal = +Math.max(min, Math.min(max, initVal)).toFixed(2);
   }
   signalValues[s.name] = { value: initVal, timestamp: Date.now() / 1000 };
 });
@@ -308,10 +327,11 @@ wss.on('connection', (ws, req) => {
         if (Math.random() >= 0.08) return; // 8% chance to switch
         nv = s.states[Math.floor(Math.random() * s.states.length)].value;
       } else {
-        const range = s.max - s.min;
+        const { min, max } = effectiveRange(s);
+        const range = max - min;
         const maxStep = range * 0.10;
         const drift = (Math.random() - 0.5) * 2 * maxStep;
-        nv = +Math.max(s.min, Math.min(s.max, cur + drift)).toFixed(2);
+        nv = +Math.max(min, Math.min(max, cur + drift)).toFixed(2);
       }
 
       clientVals[s.name] = { value: nv, timestamp: Date.now() / 1000 };

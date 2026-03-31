@@ -10,6 +10,23 @@ let _SIGNALS_META = [];
 let _INFO_DATA = null;    // populated from data/info.json
 let _CONFIG_DATA = null;  // populated from data/config.json
 
+function _isTemperatureSignal(s) {
+  const unit = String(s?.unit || '').toLowerCase();
+  const name = String(s?.name || '').toLowerCase();
+  const desc = String(s?.description || '').toLowerCase();
+  return unit.includes('c') || name.includes('temp') || desc.includes('temp');
+}
+
+function _effectiveRange(s) {
+  const baseMin = Number.isFinite(s?.min) ? s.min : 0;
+  const baseMax = Number.isFinite(s?.max) ? s.max : 100;
+  if (!_isTemperatureSignal(s)) return { min: baseMin, max: baseMax };
+
+  const min = Math.max(baseMin, 20);
+  const max = Math.min(baseMax, 60);
+  return min <= max ? { min, max } : { min: baseMin, max: baseMax };
+}
+
 // Fallback used only if signal.json cannot be fetched (e.g. bare file:// open)
 const _FALLBACK_SIGNALS_META = [
   { name: "EngineSpeed",  unit: "rpm", min: 0, max: 8000, writable: false, description: "Engine speed", states: [] },
@@ -52,11 +69,14 @@ const Store = (() => {
         // enum: pick a random valid state value
         initVal = s.states[Math.floor(Math.random() * s.states.length)].value;
       } else {
-        const mid = (s.min + s.max) / 2;
-        initVal = +(mid + (Math.random() - 0.5) * (s.max - s.min) * 0.4).toFixed(2);
+        const { min, max } = _effectiveRange(s);
+        const mid = (min + max) / 2;
+        initVal = +(mid + (Math.random() - 0.5) * (max - min) * 0.4).toFixed(2);
+        initVal = +Math.max(min, Math.min(max, initVal)).toFixed(2);
       }
       vals[s.name] = { value: initVal, timestamp: Date.now() / 1000 };
     });
+
     // Seed profiles from info.json if available, else use generated defaults
     const base = _INFO_DATA?.profiles
       ? JSON.parse(JSON.stringify(_INFO_DATA.profiles))
@@ -438,10 +458,11 @@ class MockWebSocket {
           nv = s.states[Math.floor(Math.random() * s.states.length)].value;
         } else {
           // analog: random walk, step ≤ 10% of range between ticks
-          const range = s.max - s.min;
+          const { min, max } = _effectiveRange(s);
+          const range = max - min;
           const maxStep = range * 0.10;
           const drift = (Math.random() - 0.5) * 2 * maxStep;
-          nv = +Math.max(s.min, Math.min(s.max, cur + drift)).toFixed(2);
+          nv = +Math.max(min, Math.min(max, cur + drift)).toFixed(2);
         }
         d2.signal_values[s.name] = { value: nv, timestamp: Date.now() / 1000 };
         updates.push({ name: s.name, value: nv });

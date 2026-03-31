@@ -145,6 +145,7 @@ app.use((req, res, next) => {
 // Specific doc routes first so /docs → docs/index.html, /ws → docs/ws.html
 app.get('/docs/errors', (req, res) => res.sendFile(path.join(ROOT, 'docs', 'errors.md')));
 app.get('/docs',        (req, res) => res.sendFile(path.join(ROOT, 'docs', 'index.html')));
+app.get('/ws',          (req, res) => res.sendFile(path.join(ROOT, 'docs', 'ws.html')));
 app.get('/ws-docs',     (req, res) => res.sendFile(path.join(ROOT, 'docs', 'ws.html')));
 
 // ── REST: System Info ─────────────────────────────────────────────────────────

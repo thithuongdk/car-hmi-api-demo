@@ -1,7 +1,7 @@
 /**
- * mock.js — Simulates full CAN-HMI backend: REST + WebSocket + Logger
+ * mock.js - Simulates full CAN-HMI backend: REST + WebSocket + Logger
  * Based on BE-FE-Review.json contract.
- * No real server needed — all data is stored in localStorage.
+ * No real server needed - all data is stored in localStorage.
  */
 
 // ── Default data ──────────────────────────────────────────────────────────────
@@ -97,7 +97,7 @@ const Store = (() => {
       console.warn('[Store.init] Could not load signal.json, using fallback signals.', e);
       _SIGNALS_META = JSON.parse(JSON.stringify(_FALLBACK_SIGNALS_META));
     }
-    // Fetch project info (non-critical — app works fine without it)
+    // Fetch project info (non-critical - app works fine without it)
     try {
       const ir = await fetch('data/info.json');
       if (ir.ok) {
@@ -105,7 +105,7 @@ const Store = (() => {
         // Redact sensitive fields before caching
         _INFO_DATA = { ...raw, server: raw.server ? { ...raw.server, api_key: '[REDACTED]' } : raw.server };
       }
-    } catch (_) { /* silent — info is optional */ }
+    } catch (_) { /* silent - info is optional */ }
     // Fetch editable config (non-critical)
     try {
       const cr = await fetch('data/config.json');
@@ -243,7 +243,7 @@ const MockAPI = {
 
   // ── Configs ────────────────────────────────────────────────────────────────
 
-  /** GET /configs — full system info (project, hardware, server, storage, safety, video, profiles) */
+  /** GET /configs - full system info (project, hardware, server, storage, safety, video, profiles) */
   async getConfigs() {
     await delay();
     if (!_INFO_DATA) {
@@ -256,7 +256,7 @@ const MockAPI = {
     return res;
   },
 
-  /** GET /config — editable system config (hardware.can_bus, storage, safety) from config.json */
+  /** GET /config - editable system config (hardware.can_bus, storage, safety) from config.json */
   async getConfig() {
     await delay();
     const d = Store.get();
@@ -270,7 +270,7 @@ const MockAPI = {
     return res;
   },
 
-  /** PUT /config — deep-merge editable fields into config ({ section_id, hardware?, storage?, safety? }) */
+  /** PUT /config - deep-merge editable fields into config ({ section_id, hardware?, storage?, safety? }) */
   async updateConfig(payload) {
     await delay();
     const d = Store.get();
@@ -318,7 +318,7 @@ const MockAPI = {
 
   // ── Signals ────────────────────────────────────────────────────────────────
 
-  /** GET /signals — current snapshot */
+  /** GET /signals - current snapshot */
   async getSignals() {
     await delay();
     const d = Store.get();
@@ -328,7 +328,7 @@ const MockAPI = {
     return res;
   },
 
-  /** GET /signals/available — full metadata + current value */
+  /** GET /signals/available - full metadata + current value */
   async getSignalsAvailable() {
     await delay();
     const d = Store.get();
@@ -341,7 +341,7 @@ const MockAPI = {
     return res;
   },
 
-  /** PUT /signals/:name — single signal write */
+  /** PUT /signals/:name - single signal write */
   async updateSignal(name, value) {
     await delay();
     const d = Store.get();
@@ -358,7 +358,7 @@ const MockAPI = {
 
   // ── Info ──────────────────────────────────────────────────────────────────
 
-  /** GET /api/info — project & hardware metadata (read-only) */
+  /** GET /api/info - project & hardware metadata (read-only) */
   async getInfo() {
     await delay(30);
     if (!_INFO_DATA) {
@@ -369,7 +369,7 @@ const MockAPI = {
     return _INFO_DATA;
   },
 
-  /** POST /signals/batch_update — sync multiple writable signals */
+  /** POST /signals/batch_update - sync multiple writable signals */
   async batchUpdateSignals(signals) {
     await delay();
     const d = Store.get();
@@ -428,7 +428,7 @@ class MockWebSocket {
       const updates = [];
 
       d2.signals_meta.forEach(s => {
-        // TX=true signals are HMI-controlled — preserve whatever value was set, no auto-drift
+        // TX=true signals are HMI-controlled - preserve whatever value was set, no auto-drift
         if (s.writable) return;
         const cur = d2.signal_values[s.name]?.value ?? (s.min + s.max) / 2;
         let nv;

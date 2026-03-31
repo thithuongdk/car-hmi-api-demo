@@ -1,7 +1,7 @@
 {
   "name": "car-hmi-api-demo",
   "version": "1.0.0",
-  "description": "CAN-HMI API Demo — real Express server with WebSocket for Render deployment",
+  "description": "CAN-HMI API Demo - real Express server with WebSocket for Render deployment",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

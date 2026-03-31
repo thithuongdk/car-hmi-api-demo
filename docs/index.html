@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CAN-HMI API — Swagger UI</title>
+  <title>CAN-HMI API - Swagger UI</title>
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -60,7 +60,7 @@ window.onload = function () {
     openapi: "3.0.3",
     info: {
       title: "CAN-HMI REST API",
-      description: "REST + WebSocket contract cho Car HMI demo.\n\n**WebSocket realtime stream:** `wss://car-hmi-api-demo.onrender.com/ws/signals` — xem [WebSocket Docs](/ws).\n\n---\n\n### HTTP Status Codes\n\n| HTTP | App Code | ID | Mô tả |\n|------|----------|----|-------|\n| `200 OK` | — | — | Thành công |\n| `201 Created` | — | — | POST /api/profile tạo mới |\n| `202 Accepted` | — | — | Signal write đã queue gửi CAN |\n| `204 No Content` | — | — | DELETE thành công |\n| `400 Bad Request` | `3001` `3002` | VAL_INVALID_JSON / VAL_MISSING_FIELD | JSON sai / thiếu field |\n| `401 Unauthorized` | `4001` | SEC_UNAUTHORIZED | API Key không hợp lệ |\n| `403 Forbidden` | `4002` `4004` | SAFE_WRITE_DENIED / SAFE_VEHICLE_MOVING | Signal read-only / xe đang chạy |\n| `404 Not Found` | `3004` | VAL_NOT_FOUND | Resource không tồn tại |\n| `409 Conflict` | `3005` | VAL_CONFLICT | Tên trùng / section_id mismatch |\n| `422 Unprocessable` | `3003` | VAL_OUT_OF_RANGE | Value ngoài [min, max] |\n| `500 Server Error` | `1000` `4003` | SYS_UNKNOWN / SAFE_WATCHDOG_TRIP | Lỗi nội bộ |\n| `503 Unavailable` | `1001` `2001` | SYS_DB_LOCKED / HW_CAN_ERROR | DB locked / hardware |\n| `504 Timeout` | `2002` | HW_XCP_TIMEOUT | ECU XCP timeout |\n\nXem đầy đủ tại **[Error Codes Reference](/docs/errors)**.\n\n---\n\n### section_id (Optimistic Locking)\nMỗi PUT request phải kèm `section_id` khớp với giá trị hiện tại của server.\nNếu không khớp → **409 / VAL_CONFLICT** → client GET lại rồi retry.",,
+      description: "REST + WebSocket contract cho Car HMI demo.\n\n**WebSocket realtime stream:** `wss://car-hmi-api-demo.onrender.com/ws/signals` - xem [WebSocket Docs](/ws).\n\n---\n\n### HTTP Status Codes\n\n| HTTP | App Code | ID | Mô tả |\n|------|----------|----|-------|\n| `200 OK` | - | - | Thành công |\n| `201 Created` | - | - | POST /api/profile tạo mới |\n| `202 Accepted` | - | - | Signal write đã queue gửi CAN |\n| `204 No Content` | - | - | DELETE thành công |\n| `400 Bad Request` | `3001` `3002` | VAL_INVALID_JSON / VAL_MISSING_FIELD | JSON sai / thiếu field |\n| `401 Unauthorized` | `4001` | SEC_UNAUTHORIZED | API Key không hợp lệ |\n| `403 Forbidden` | `4002` `4004` | SAFE_WRITE_DENIED / SAFE_VEHICLE_MOVING | Signal read-only / xe đang chạy |\n| `404 Not Found` | `3004` | VAL_NOT_FOUND | Resource không tồn tại |\n| `409 Conflict` | `3005` | VAL_CONFLICT | Tên trùng / section_id mismatch |\n| `422 Unprocessable` | `3003` | VAL_OUT_OF_RANGE | Value ngoài [min, max] |\n| `500 Server Error` | `1000` `4003` | SYS_UNKNOWN / SAFE_WATCHDOG_TRIP | Lỗi nội bộ |\n| `503 Unavailable` | `1001` `2001` | SYS_DB_LOCKED / HW_CAN_ERROR | DB locked / hardware |\n| `504 Timeout` | `2002` | HW_XCP_TIMEOUT | ECU XCP timeout |\n\nXem đầy đủ tại **[Error Codes Reference](/docs/errors)**.\n\n---\n\n### section_id (Optimistic Locking)\nMỗi PUT request phải kèm `section_id` khớp với giá trị hiện tại của server.\nNếu không khớp → **409 / VAL_CONFLICT** → client GET lại rồi retry.",,
       version: "1.0.0",
       contact: { url: "https://car-hmi-api-demo.onrender.com" }
     },
@@ -70,7 +70,7 @@ window.onload = function () {
     ],
     tags: [
       { name: "System",   description: "Project info and system metadata (read-only)" },
-      { name: "Profiles", description: "User profile management — which signals to show per user" },
+      { name: "Profiles", description: "User profile management - which signals to show per user" },
       { name: "Config",   description: "System configuration: sampling rate, RTSP/WebRTC URLs. Dev mode only." },
       { name: "Signals",  description: "Read CAN signal values and write writable signals" }
     ],
@@ -97,7 +97,7 @@ window.onload = function () {
                 }
               }
             },
-            "503": { description: "Service Unavailable — info not loaded yet", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
+            "503": { description: "Service Unavailable - info not loaded yet", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
           }
         }
       },
@@ -317,7 +317,7 @@ window.onload = function () {
         post: {
           tags: ["Signals"],
           summary: "Ghi dong thoi nhieu writable signals (batch)",
-          description: "Bulk write — dong bo nhieu writable signals trong mot request.",
+          description: "Bulk write - dong bo nhieu writable signals trong mot request.",
           operationId: "batchUpdateSignals",
           requestBody: {
             required: true,
@@ -336,7 +336,7 @@ window.onload = function () {
           },
           responses: {
             "202": {
-              description: "Accepted — tất cả signals đã được queue",
+              description: "Accepted - tất cả signals đã được queue",
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/BatchSignalWriteAccepted" },
@@ -344,7 +344,7 @@ window.onload = function () {
                 }
               }
             },
-            "400": { description: "Bad Request — thiếu trường `updates` hoặc sai định dạng", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
+            "400": { description: "Bad Request - thiếu trường `updates` hoặc sai định dạng", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
           }
         }
       },
@@ -369,8 +369,8 @@ window.onload = function () {
             }
           },
           responses: {
-            "202": { description: "Accepted — signal queued for CAN write", content: { "application/json": { schema: { $ref: "#/components/schemas/SignalWriteAccepted" }, example: { signal_name: "HB_FL_ActivationLevel", value: 3, queued_at: 1717243200.123 } } } },
-            "403": { description: "Forbidden — signal is read-only (TX: false)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" }, example: { error: "Not writable" } } } },
+            "202": { description: "Accepted - signal queued for CAN write", content: { "application/json": { schema: { $ref: "#/components/schemas/SignalWriteAccepted" }, example: { signal_name: "HB_FL_ActivationLevel", value: 3, queued_at: 1717243200.123 } } } },
+            "403": { description: "Forbidden - signal is read-only (TX: false)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" }, example: { error: "Not writable" } } } },
             "404": { description: "Signal not found",             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" }, example: { error: "Not found" } } } }
           }
         }

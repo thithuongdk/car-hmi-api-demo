@@ -1,5 +1,5 @@
 {
-    "_readme": "API contract spec — each key maps to one API group. payload_example shows real request/response shapes.",
+    "_readme": "API contract spec - each key maps to one API group. payload_example shows real request/response shapes.",
     "info": {
         "description": "Read-only project & hardware metadata. api_key is always redacted.",
         "api": true,
@@ -207,7 +207,7 @@
                 "http": 409,
                 "code": 3005,
                 "id": "VAL_CONFLICT",
-                "reason": "section_id mismatch — stale update"
+                "reason": "section_id mismatch - stale update"
             }
         ]
     },
@@ -243,7 +243,7 @@
         "method": [
             "GET"
         ],
-        "note": "Source: data/info.json — read-only, not editable via API. Use GET/PUT /config for editable settings.",
+        "note": "Source: data/info.json - read-only, not editable via API. Use GET/PUT /config for editable settings.",
         "response_example": {
             "section_id": 123,
             "project": {
@@ -307,7 +307,7 @@
         "method": [
             "GET"
         ],
-        "note": "Source: data/config.json — contains hardware.can_bus, storage, safety. These fields can be updated via PUT /config.",
+        "note": "Source: data/config.json - contains hardware.can_bus, storage, safety. These fields can be updated via PUT /config.",
         "response_example": {
             "section_id": 123,
             "hardware": {
@@ -347,7 +347,7 @@
         "method": [
             "PUT"
         ],
-        "note": "Only fields present in config.json are writable. Partial update supported — omitted fields are unchanged.",
+        "note": "Only fields present in config.json are writable. Partial update supported - omitted fields are unchanged.",
         "request_body": {
             "section_id": 123,
             "hardware": {
@@ -399,7 +399,7 @@
                 "http": 409,
                 "code": 3005,
                 "id": "VAL_CONFLICT",
-                "reason": "section_id mismatch — stale update"
+                "reason": "section_id mismatch - stale update"
             },
             {
                 "http": 400,
@@ -628,7 +628,7 @@
         },
         "close_codes": {
             "1000": "Normal close",
-            "1006": "Abnormal close — retry with exponential backoff",
+            "1006": "Abnormal close - retry with exponential backoff",
             "1008": "Policy violation (bad token)",
             "1011": "Server error"
         }
@@ -730,7 +730,7 @@
                     "code": 4002,
                     "id": "SAFE_WRITE_DENIED",
                     "http": 403,
-                    "description": "Write denied — TX=false or vehicle moving"
+                    "description": "Write denied - TX=false or vehicle moving"
                 },
                 {
                     "code": 4003,

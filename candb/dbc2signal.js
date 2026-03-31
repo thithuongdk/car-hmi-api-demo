@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * dbc2signal.js — Convert a .dbc file to candb/signal.json
+ * dbc2signal.js - Convert a .dbc file to candb/signal.json
  *
  * Usage:
  *   node candb/dbc2signal.js [input.dbc] [output.json]

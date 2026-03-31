@@ -19,41 +19,41 @@ REST + WebSocket được mock bằng JavaScript + localStorage.
 | 📊 Dashboard | Signal cards với live mock WS updates; write controls cho writable signals |
 | 👤 Profiles | CRUD profiles, select active → Dashboard filter theo profile (User mode) |
 | ⚙️ Config | (Dev mode only) Xem/sửa configs, sampling rate, RTSP/WebRTC URL, DBC files |
-| ℹ️ Signals Info | Bảng metadata đầy đủ — `GET /signals/available` |
+| ℹ️ Signals Info | Bảng metadata đầy đủ - `GET /signals/available` |
 | 📋 API Log | Log tất cả API calls (method, URL, request/response body, status) |
 
 ## Signal Catalogue
 
 | Signal | Unit | Min | Max | Writable | States |
 |---|---|---|---|---|---|
-| `EngineSpeed` | rpm | 0 | 8000 | No | — |
-| `CoolantTemp` | °C | 0 | 120 | No | — |
-| `HB_FL_ActivationLevel` | — | 0 | 7 | **Yes** | Level 1–8 (values 0–7) |
-| `HB_FR_ActivationLevel` | — | 0 | 7 | **Yes** | Level 1–8 (values 0–7) |
+| `EngineSpeed` | rpm | 0 | 8000 | No | - |
+| `CoolantTemp` | °C | 0 | 120 | No | - |
+| `HB_FL_ActivationLevel` | - | 0 | 7 | **Yes** | Level 1–8 (values 0–7) |
+| `HB_FR_ActivationLevel` | - | 0 | 7 | **Yes** | Level 1–8 (values 0–7) |
 
 ## API endpoints được mock
 
 ```
 # Profiles  (User mode)
-GET    /api/profiles              — list all profiles
-GET    /api/profile?name=X        — get one profile
-POST   /api/profile               — create profile
-PUT    /api/profile               — update profile (section_id required)
-DELETE /api/profile/{name}        — delete profile → 204
+GET    /api/profiles              - list all profiles
+GET    /api/profile?name=X        - get one profile
+POST   /api/profile               - create profile
+PUT    /api/profile               - update profile (section_id required)
+DELETE /api/profile/{name}        - delete profile → 204
 
 # Config  (Dev mode)
-GET    /configs                   — list all configs
-GET    /config                    — get active config
-PUT    /config                    — update config (section_id required)
+GET    /configs                   - list all configs
+GET    /config                    - get active config
+PUT    /config                    - update config (section_id required)
 
 # Signals  (User + Dev)
-GET    /signals                   — snapshot current values
-GET    /signals/available         — full metadata (unit, min, max, writable, states)
-PUT    /signals/{signal_name}     — write single writable signal → 202
-POST   /signals/batch_update      — batch write writable signals → 202
+GET    /signals                   - snapshot current values
+GET    /signals/available         - full metadata (unit, min, max, writable, states)
+PUT    /signals/{signal_name}     - write single writable signal → 202
+POST   /signals/batch_update      - batch write writable signals → 202
 
 # Realtime
-WS     ws://host/ws/signals       — real-time signal stream (interval = 1000/sampling_rate ms)
+WS     ws://host/ws/signals       - real-time signal stream (interval = 1000/sampling_rate ms)
 ```
 
 ## section_id (Optimistic Locking)
@@ -118,8 +118,8 @@ Nếu chưa có `signal.json` (lần đầu), không tạo backup.
 | `source` | Node gửi từ `BO_` sender |
 | `destination` | Danh sách nhận từ `SG_` (bỏ `Vector__XXX`) |
 | `states` | `VAL_` enum table (nếu có) |
-| `RX` | `true` (mặc định — tất cả signal đều readable) |
-| `TX` | `false` (mặc định — sửa thủ công cho writable signals) |
+| `RX` | `true` (mặc định - tất cả signal đều readable) |
+| `TX` | `false` (mặc định - sửa thủ công cho writable signals) |
 | `value` / `timestamp` | `0` (khởi tạo) |
 
 ### Ví dụ output
@@ -155,27 +155,27 @@ python -m http.server 8080
 
 ```
 car-hmi-api-demo/
-├── review.json       — review checklist
-├── index.html        — SPA shell
-├── vercel.json       — Vercel static config
-├── render.yaml       — Render static site config
+├── review.json       - review checklist
+├── index.html        - SPA shell
+├── vercel.json       - Vercel static config
+├── render.yaml       - Render static site config
 ├── candb/
-│   ├── p_dummy.dbc   — nguồn DBC mẫu
-│   ├── signal.json   — signal catalogue (sinh bởi dbc2signal.js)
-│   └── dbc2signal.js — converter script
+│   ├── p_dummy.dbc   - nguồn DBC mẫu
+│   ├── signal.json   - signal catalogue (sinh bởi dbc2signal.js)
+│   └── dbc2signal.js - converter script
 ├── css/
-│   └── style.css     — Dark theme
+│   └── style.css     - Dark theme
 ├── docs/
-│   ├── index.html    — Swagger UI (GET /docs)
-│   └── ws.html       — WebSocket docs + live tester (GET /ws)
+│   ├── index.html    - Swagger UI (GET /docs)
+│   └── ws.html       - WebSocket docs + live tester (GET /ws)
 └── js/
-    ├── mock.js       — Store + MockAPI + MockWebSocket + Logger
-    └── app.js        — UI application logic
+    ├── mock.js       - Store + MockAPI + MockWebSocket + Logger
+    └── app.js        - UI application logic
 ```
 
 ## Notes cho FE team
 
-- **Dữ liệu lưu trong localStorage** — Reset bằng nút "↺ Reset" ở header.
+- **Dữ liệu lưu trong localStorage** - Reset bằng nút "↺ Reset" ở header.
 - **Mode User**: Dashboard chỉ hiện signals theo active profile.
 - **Mode Dev**: Tất cả signals + tab Config + Signals Info.
 - **WS stream interval** phụ thuộc `sampling_rate` của active config.

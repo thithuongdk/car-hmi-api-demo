@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CAN-HMI — WebSocket Endpoint</title>
+  <title>CAN-HMI - WebSocket Endpoint</title>
   <style>
     :root {
       --bg:      #0f1117;
@@ -329,7 +329,7 @@
     <!-- HERO -->
     <div id="overview" style="margin-bottom:48px; padding-bottom:28px; border-bottom:1px solid var(--border)">
       <h1>WebSocket Endpoint</h1>
-      <p style="font-size:15px">Realtime CAN signal stream — BE push updates theo <code>sampling_rate</code> của active config. FE chỉ cần giữ một kết nối duy nhất để nhận tất cả signals.</p>
+      <p style="font-size:15px">Realtime CAN signal stream - BE push updates theo <code>sampling_rate</code> của active config. FE chỉ cần giữ một kết nối duy nhất để nhận tất cả signals.</p>
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px">
         <a class="btn btn-green" href="#live-demo">&#9654; Live Demo</a>
         <a class="btn" href="/docs">REST API Swagger &#8599;</a>
@@ -358,7 +358,7 @@
       </div>
 
       <div class="warn-box">
-        <strong>&#9888; Demo này dùng MockWebSocket</strong> — không cần kết nối server thật.
+        <strong>&#9888; Demo này dùng MockWebSocket</strong> - không cần kết nối server thật.
         Trang <a href="/">Demo app</a> và <a href="#live-demo">Live Tester</a> bên dưới đều dùng mock data từ <code>localStorage</code>.
       </div>
 
@@ -370,7 +370,7 @@
             <tr><td>Path</td><td><code>/ws/signals</code></td></tr>
             <tr><td>Direction</td><td>Server → Client (push only; xem <a href="#msg-client">Client → Server</a> cho ping)</td></tr>
             <tr><td>Message format</td><td>JSON text</td></tr>
-            <tr><td>Interval</td><td><code>1000 / sampling_rate</code> ms — mặc định 100ms (100 Hz)</td></tr>
+            <tr><td>Interval</td><td><code>1000 / sampling_rate</code> ms - mặc định 100ms (100 Hz)</td></tr>
             <tr><td>Authentication</td><td>None (demo). Production: <code>?token=&lt;jwt&gt;</code> query param</td></tr>
           </tbody>
         </table>
@@ -421,7 +421,7 @@
           <tbody>
             <tr><td><code>timestamp</code></td><td>string (ISO 8601)</td><td>Thời điểm frame được tạo, UTC</td></tr>
             <tr><td><code>signals[]</code></td><td>array</td><td>Danh sách signal updates trong frame này</td></tr>
-            <tr><td><code>signals[].name</code></td><td>string</td><td>Tên signal — khớp với <code>GET /signals/available</code></td></tr>
+            <tr><td><code>signals[].name</code></td><td>string</td><td>Tên signal - khớp với <code>GET /signals/available</code></td></tr>
             <tr><td><code>signals[].value</code></td><td>number</td><td>Giá trị hiện tại. Enum signals: integer (index của state)</td></tr>
           </tbody>
         </table>
@@ -474,7 +474,7 @@ ws.send(JSON.stringify({ <span class="c-key">"type"</span>: <span class="c-str">
       </div>
 
       <div id="tab-js-vanilla" class="tab-pane active">
-        <div class="code-block"><span class="c-cmt">// 1. On app startup — fetch metadata once</span>
+        <div class="code-block"><span class="c-cmt">// 1. On app startup - fetch metadata once</span>
 <span class="c-kw">const</span> res = <span class="c-kw">await</span> <span class="c-fn">fetch</span>(<span class="c-str">"/signals/available"</span>);
 <span class="c-kw">const</span> { signals_info } = <span class="c-kw">await</span> res.<span class="c-fn">json</span>();
 <span class="c-cmt">// signals_info: [{ name, unit, min, max, writable, states, value }, ...]</span>
@@ -564,7 +564,7 @@ asyncio.<span class="c-fn">run</span>(<span class="c-fn">listen_signals</span>()
     <!-- LIVE DEMO -->
     <section id="live-demo">
       <h2>Live Tester (Mock)</h2>
-      <p>Connects to <strong>MockWebSocket</strong> — data được simulate trong browser, không cần server thật.</p>
+      <p>Connects to <strong>MockWebSocket</strong> - data được simulate trong browser, không cần server thật.</p>
 
       <div class="demo-card">
         <div class="demo-header">
@@ -580,8 +580,8 @@ asyncio.<span class="c-fn">run</span>(<span class="c-fn">listen_signals</span>()
         <div class="demo-log" id="log"></div>
         <div class="demo-stats">
           <span>Messages: <strong id="stat-msgs">0</strong></span>
-          <span>Signals/frame: <strong id="stat-sigs">—</strong></span>
-          <span>Interval: <strong id="stat-interval">—</strong></span>
+          <span>Signals/frame: <strong id="stat-sigs">-</strong></span>
+          <span>Interval: <strong id="stat-interval">-</strong></span>
         </div>
       </div>
     </section>
@@ -712,7 +712,7 @@ btnConn.addEventListener('click', () => {
     btnConn.disabled = false;
     btnDisc.disabled = true;
     addLog('EVENT', 'Disconnected', 'ev');
-    statIntvl.textContent = '—';
+    statIntvl.textContent = '-';
   };
 });
 

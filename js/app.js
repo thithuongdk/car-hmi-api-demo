@@ -1,5 +1,5 @@
 /**
- * app.js — CAN-HMI API Demo application
+ * app.js - CAN-HMI API Demo application
  * Handles mode, profiles, configs, signals dashboard, API log.
  * All API calls go through MockAPI (mock.js). No real backend needed.
  */
@@ -146,7 +146,7 @@ function _buildSignalCard(meta) {
   const alarm = val > meta.max * 0.95 ? "crit" : val > meta.max * 0.8 ? "warn" : "";
   if (alarm) card.classList.add("alarm-" + alarm);
 
-  const ts = sv ? new Date(sv.timestamp * 1000).toLocaleTimeString("en-GB") : "—";
+  const ts = sv ? new Date(sv.timestamp * 1000).toLocaleTimeString("en-GB") : "-";
 
   let barOrStates = "";
   if (!isEnum) {
@@ -280,7 +280,7 @@ function _renderProfilesPanel(profiles, sectionId) {
   container.innerHTML = `
     <div class="section-id-bar">
       <span>section_id (optimistic lock):</span><strong>${sectionId}</strong>
-      <span style="color:var(--muted);font-size:11px">— PUT/DELETE must send matching section_id or BE will deny (409)</span>
+      <span style="color:var(--muted);font-size:11px">- PUT/DELETE must send matching section_id or BE will deny (409)</span>
     </div>
     <div class="card-grid" id="profiles-grid"></div>`;
 
@@ -408,7 +408,7 @@ function _openProfileModal(profile = null) {
   nameEl.disabled = isEdit;
   nameEl.dataset.editName = isEdit ? profile.profile_name : "";
   document.getElementById("pf-mode").value = isEdit ? "edit" : "create";
-  document.getElementById("profile-modal-title").textContent = isEdit ? `Edit Profile — ${profile.profile_name}` : "New Profile";
+  document.getElementById("profile-modal-title").textContent = isEdit ? `Edit Profile - ${profile.profile_name}` : "New Profile";
   document.getElementById("btn-save-profile").textContent = isEdit ? "Update" : "Save";
 
   const selected = new Set(isEdit ? profile.signals : []);
@@ -520,15 +520,15 @@ function _renderConfigsPanel(infoRes, configRes) {
   container.innerHTML = `
     <div class="section-id-bar" style="margin-bottom:16px">
       <span>section_id:</span><strong>${sectionId}</strong>
-      <span style="color:var(--muted);font-size:11px">— PUT /config must send matching section_id (409 on mismatch)</span>
+      <span style="color:var(--muted);font-size:11px">- PUT /config must send matching section_id (409 on mismatch)</span>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
       <div>
-        <h3 style="margin:0 0 10px;font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.05em">GET /configs — System Info (info.json, read-only)</h3>
+        <h3 style="margin:0 0 10px;font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.05em">GET /configs - System Info (info.json, read-only)</h3>
         ${infoHTML}
       </div>
       <div>
-        <h3 style="margin:0 0 10px;font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.05em">GET /config — Editable Config (config.json)</h3>
+        <h3 style="margin:0 0 10px;font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.05em">GET /config - Editable Config (config.json)</h3>
         ${cfgFormHTML}
       </div>
     </div>`;
@@ -575,10 +575,10 @@ function _renderSignalsInfo() {
     const tr = document.createElement("tr");
     const statesHtml = s.states.length
       ? s.states.map(st => `<span class="chip">${st.value}:${st.description}</span>`).join(" ")
-      : '<span style="color:var(--muted)">—</span>';
+      : '<span style="color:var(--muted)">-</span>';
     tr.innerHTML = `
       <td><strong>${s.name}</strong></td>
-      <td>${s.unit || "—"}</td>
+      <td>${s.unit || "-"}</td>
       <td>${s.min}</td>
       <td>${s.max}</td>
       <td><span class="badge ${s.writable ? "badge--ok" : "badge--neutral"}">${s.writable ? "Yes" : "No"}</span></td>

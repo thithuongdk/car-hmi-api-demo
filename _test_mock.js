@@ -38,7 +38,7 @@ global.document = {
   createElement:    () => _noop(),
 };
 
-// Load mock.js — use Function() so const bindings are accessible in same scope
+// Load mock.js - use Function() so const bindings are accessible in same scope
 const mockSrc = fs.readFileSync('js/mock.js', 'utf8');
 const { Store, MockAPI, MockWebSocket } =
   new Function('require', mockSrc + '\n;return {Store, MockAPI, MockWebSocket};')(require);
@@ -149,7 +149,7 @@ function ok(label, val) {
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n${'─'.repeat(40)}`);
   if (failed === 0) {
-    console.log(`✅ ALL ${passed} TESTS PASSED — safe to push to Render/Vercel`);
+    console.log(`✅ ALL ${passed} TESTS PASSED - safe to push to Render/Vercel`);
   } else {
     console.error(`❌ ${failed} FAILED / ${passed} passed`);
     process.exit(1);

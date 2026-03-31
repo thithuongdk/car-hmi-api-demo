@@ -1,5 +1,5 @@
 /**
- * server.js — CAN-HMI API Demo  (Express + ws)
+ * server.js - CAN-HMI API Demo  (Express + ws)
  * Real HTTP server + WebSocket streaming.
  * Mirrors the mock.js contract exactly so FE can swap wss://... into real URL.
  *
@@ -70,7 +70,7 @@ if (INFO_JSON) {
 // Deep-clone config so mutations don't touch the loaded object
 let CONFIG_DATA = CONFIG_JSON ? JSON.parse(JSON.stringify(CONFIG_JSON)) : null;
 
-// Signal values — seeded with midpoint or random enum state
+// Signal values - seeded with midpoint or random enum state
 const signalValues = {};
 SIGNALS_META.forEach(s => {
   let initVal;
@@ -83,7 +83,7 @@ SIGNALS_META.forEach(s => {
   signalValues[s.name] = { value: initVal, timestamp: Date.now() / 1000 };
 });
 
-// Profiles — seeded from info.json profiles section, or from profiles.json, or built-in defaults
+// Profiles - seeded from info.json profiles section, or from profiles.json, or built-in defaults
 let sectionId = INFO_JSON?.section_id ?? CONFIG_JSON?.section_id ?? 1;
 
 function buildDefaultProfiles() {
@@ -132,7 +132,7 @@ function err(res, code, id, msg, httpStatus) {
 const app = express();
 app.use(express.json());
 
-// CORS — allow any origin for demo use
+// CORS - allow any origin for demo use
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');

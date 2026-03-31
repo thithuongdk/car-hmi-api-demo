@@ -664,9 +664,9 @@
             "20xx_hardware": [
                 {
                     "code": 2001,
-                    "id": "HW_CAN_ERROR",
+                    "id": "HW_CAN_0_ERROR",
                     "http": 503,
-                    "description": "SocketCAN connection error"
+                    "description": "CAN0 bus communication timeout"
                 },
                 {
                     "code": 2002,

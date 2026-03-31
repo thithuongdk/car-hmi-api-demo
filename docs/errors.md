@@ -17,7 +17,7 @@ All API errors return a consistent JSON structure:
 | `1000` | `SYS_UNKNOWN` | 500 | System | Unknown error |
 | `1001` | `SYS_DB_LOCKED` | 503 | System | SQLite database locked |
 | `1002` | `SYS_MAINTENANCE` | 503 | System | System under maintenance |
-| `2001` | `HW_CAN_ERROR` | 503 | Hardware | SocketCAN connection error |
+| `2001` | `HW_CAN_0_ERROR` | 503 | Hardware | CAN0 bus communication timeout |
 | `2002` | `HW_CAN_1_ERROR` | 504 | Hardware | CAN1 bus communication timeout |
 | `2003` | `HW_CAM_LOST` | 503 | Hardware | Camera signal lost |
 | `3001` | `VAL_INVALID_JSON` | 400 | Validation | Invalid JSON format |

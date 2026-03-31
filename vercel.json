@@ -1,7 +1,9 @@
 {
   "version": 2,
   "routes": [
-    { "src": "/docs", "dest": "/docs/index.html" },
-    { "src": "/(.*)", "dest": "/$1" }
+    { "src": "/docs",       "dest": "/docs/index.html" },
+    { "src": "/ws",         "dest": "/docs/ws.html"    },
+    { "src": "/docs/errors","dest": "/docs/errors.md"  },
+    { "src": "/(.*)",       "dest": "/$1"              }
   ]
 }

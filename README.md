@@ -77,6 +77,72 @@ npm i -g vercel
 vercel --prod
 ```
 
+## DBC → signal.json (cập nhật signal catalogue)
+
+Script `candb/dbc2signal.js` đọc một file `.dbc` và sinh lại `candb/signal.json`.
+File `signal.json` cũ được tự động backup trước khi ghi đè.
+
+### Cách dùng
+
+```bash
+# Cú pháp
+node candb/dbc2signal.js [input.dbc] [output.json]
+
+# Mặc định (dùng p_dummy.dbc → signal.json)
+node candb/dbc2signal.js
+
+# Chỉ định file tùy ý
+node candb/dbc2signal.js candb/my_project.dbc candb/signal.json
+```
+
+### Backup tự động
+
+Mỗi lần chạy, file `signal.json` hiện tại được copy sang:
+
+```
+candb/signal.bk_001.json   ← lần chạy đầu tiên
+candb/signal.bk_002.json   ← lần chạy thứ hai
+…
+```
+
+Nếu chưa có `signal.json` (lần đầu), không tạo backup.
+
+### Quy ước các trường được sinh tự động
+
+| Trường | Nguồn |
+|---|---|
+| `name` | `SG_` signal name |
+| `description` | `CM_ SG_` comment đầu tiên |
+| `unit` | `SG_` unit field hoặc `CM_` "Signalvalues: mm/deg/..." |
+| `min` / `max` | `SG_` range `[min\|max]` |
+| `source` | Node gửi từ `BO_` sender |
+| `destination` | Danh sách nhận từ `SG_` (bỏ `Vector__XXX`) |
+| `states` | `VAL_` enum table (nếu có) |
+| `RX` | `true` (mặc định — tất cả signal đều readable) |
+| `TX` | `false` (mặc định — sửa thủ công cho writable signals) |
+| `value` / `timestamp` | `0` (khởi tạo) |
+
+### Ví dụ output
+
+```json
+{
+  "name": "SPS_FL_SeatDirectionX",
+  "value": 0,
+  "source": ["PANTHER"],
+  "destination": ["CAR_PC", "SIMI"],
+  "timestamp": 0,
+  "description": "FL Seat x-for Direction Actuator",
+  "unit": "mm",
+  "min": 0,
+  "max": 4095,
+  "RX": true,
+  "TX": false,
+  "states": []
+}
+```
+
+---
+
 ## Chạy local
 
 ```bash
@@ -92,10 +158,16 @@ car-hmi-api-demo/
 ├── review.json       — review checklist
 ├── index.html        — SPA shell
 ├── vercel.json       — Vercel static config
+├── render.yaml       — Render static site config
+├── candb/
+│   ├── p_dummy.dbc   — nguồn DBC mẫu
+│   ├── signal.json   — signal catalogue (sinh bởi dbc2signal.js)
+│   └── dbc2signal.js — converter script
 ├── css/
 │   └── style.css     — Dark theme
 ├── docs/
-│   └── index.html    — API documentation (static)
+│   ├── index.html    — Swagger UI (GET /docs)
+│   └── ws.html       — WebSocket docs + live tester (GET /ws)
 └── js/
     ├── mock.js       — Store + MockAPI + MockWebSocket + Logger
     └── app.js        — UI application logic

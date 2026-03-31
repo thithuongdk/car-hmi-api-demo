@@ -1,0 +1,244 @@
+# CAN-HMI API — B? Mã L?i (Error Codes)
+
+T?t c? l?i API tr? v? JSON cùng c?u trúc:
+
+```json
+{
+  "error": "Mô t? l?i ng?n g?n",
+  "code": 3002,
+  "id":   "VAL_MISSING_FIELD"
+}
+```
+
+> **Ghi chú:** `code` và `id` là application-level error codes, d?c l?p v?i HTTP status code.  
+> `code` dùng d? switch-case phía FE; `id` dùng d? log/trace d? d?c.
+
+---
+
+## T?ng Quan Mã L?i
+
+| Code | ID | HTTP | Nhóm | Mô t? |
+|------|----|------|------|-------|
+| `1000` | `SYS_UNKNOWN` | 500 | System | L?i không xác d?nh |
+| `1001` | `SYS_DB_LOCKED` | 503 | System | Database SQLite b? khóa |
+| `1002` | `SYS_MAINTENANCE` | 503 | System | H? th?ng dang b?o trì |
+| `2001` | `HW_CAN_ERROR` | 503 | Hardware | L?i k?t n?i SocketCAN |
+| `2002` | `HW_XCP_TIMEOUT` | 504 | Hardware | ECU không ph?n h?i (XCP) |
+| `2003` | `HW_CAM_LOST` | 503 | Hardware | M?t tín hi?u Camera |
+| `2004` | `HW_GPS_NO_FIX` | 200 | Hardware | Chua có tín hi?u GPS |
+| `3001` | `VAL_INVALID_JSON` | 400 | Validation | JSON không h?p l? |
+| `3002` | `VAL_MISSING_FIELD` | 400 | Validation | Thi?u tru?ng b?t bu?c |
+| `3003` | `VAL_OUT_OF_RANGE` | 422 | Validation | Giá tr? ngoài ngu?ng min/max |
+| `3004` | `VAL_NOT_FOUND` | 404 | Validation | Resource không t?n t?i |
+| `3005` | `VAL_CONFLICT` | 409 | Validation | section_id mismatch / tên trùng |
+| `4001` | `SEC_UNAUTHORIZED` | 401 | Security | API Key không h?p l? |
+| `4002` | `SAFE_WRITE_DENIED` | 403 | Safety | Signal read-only, không ghi du?c |
+| `4003` | `SAFE_WATCHDOG_TRIP` | 500 | Safety | Watchdog phát hi?n l?i treo |
+| `4004` | `SAFE_VEHICLE_MOVING` | 403 | Safety | Không ghi du?c khi xe dang ch?y |
+
+---
+
+## ?? Nhóm 10xx — L?i H? Th?ng (System Errors)
+
+| Code | ID | HTTP | Mô t? | Hành d?ng g?i ý |
+|------|----|------|-------|----------------|
+| `1000` | `SYS_UNKNOWN` | 500 | L?i không xác d?nh, chua du?c phân lo?i | Ki?m tra server log. Retry sau vài giây |
+| `1001` | `SYS_DB_LOCKED` | 503 | Database SQLite b? khóa (write contention) | Retry sau 1–3 giây v?i exponential backoff |
+| `1002` | `SYS_MAINTENANCE` | 503 | H? th?ng dang b?o trì, không nh?n request | Hi?n th? thông báo ch? cho user |
+
+**Ví d? response:**
+```json
+{ "error": "Database is locked, please retry", "code": 1001, "id": "SYS_DB_LOCKED" }
+```
+
+---
+
+## ?? Nhóm 20xx — L?i Ph?n C?ng (Hardware & Drivers)
+
+| Code | ID | HTTP | Mô t? | Hành d?ng g?i ý |
+|------|----|------|-------|----------------|
+| `2001` | `HW_CAN_ERROR` | 503 | L?i k?t n?i SocketCAN (bus-off ho?c ng?t cáp) | Ki?m tra driver CAN, cáp D-Sub9 |
+| `2002` | `HW_XCP_TIMEOUT` | 504 | ECU không ph?n h?i qua XCP trong timeout | Ki?m tra ngu?n ECU, k?t n?i XCP-on-CAN |
+| `2003` | `HW_CAM_LOST` | 503 | M?t tín hi?u Camera (stream ng?t) | Kh?i d?ng l?i camera stream, ki?m tra ngu?n |
+| `2004` | `HW_GPS_NO_FIX` | 200 | Chua có tín hi?u v? tinh (satellite fix) | Ch? xe ra khu v?c thoáng. Không ph?i l?i nghiêm tr?ng — GPS value là `null` |
+
+> `HW_GPS_NO_FIX` tr? HTTP **200** vì là tr?ng thái bình thu?ng lúc kh?i d?ng.
+
+**Ví d? response `2001`:**
+```json
+{ "error": "SocketCAN interface vcan0 is down", "code": 2001, "id": "HW_CAN_ERROR" }
+```
+
+---
+
+## ?? Nhóm 30xx — L?i D? Li?u & Validate (Data & Validation)
+
+| Code | ID | HTTP | Mô t? | Hành d?ng g?i ý |
+|------|----|------|-------|----------------|
+| `3001` | `VAL_INVALID_JSON` | 400 | Request body không ph?i JSON h?p l? | Ki?m tra cú pháp JSON, header `Content-Type: application/json` |
+| `3002` | `VAL_MISSING_FIELD` | 400 | Thi?u tru?ng d? li?u b?t bu?c | B? sung key còn thi?u theo API schema |
+| `3003` | `VAL_OUT_OF_RANGE` | 422 | Giá tr? tín hi?u vu?t ngu?ng `min`/`max` | G?i `GET /signals/available` d? l?y gi?i h?n h?p l? |
+| `3004` | `VAL_NOT_FOUND` | 404 | Profile name / Signal name không t?n t?i | `GET /api/profiles` ho?c `GET /signals/available` d? l?y danh sách dúng |
+| `3005` | `VAL_CONFLICT` | 409 | Tên profile trùng, ho?c `section_id` không kh?p | Xem m?c **Optimistic Locking** bên du?i |
+
+**Ví d? response `3003`:**
+```json
+{ "error": "Value 10 is out of range [0, 7] for HB_FL_ActivationLevel", "code": 3003, "id": "VAL_OUT_OF_RANGE" }
+```
+
+---
+
+## ?? Nhóm 40xx — L?i An Toàn & B?o M?t (Safety & Security)
+
+| Code | ID | HTTP | Mô t? | Hành d?ng g?i ý |
+|------|----|------|-------|----------------|
+| `4001` | `SEC_UNAUTHORIZED` | 401 | API Key không h?p l? ho?c thi?u header `X-API-Key` | Ki?m tra c?u hình header. Liên h? admin l?y key m?i |
+| `4002` | `SAFE_WRITE_DENIED` | 403 | Signal có `TX: false` — sensor only, HMI không du?c ghi | Không g?i l?nh ghi. Ki?m tra `writable` t? `GET /signals/available` |
+| `4003` | `SAFE_WATCHDOG_TRIP` | 500 | Watchdog phát hi?n process treo, t? reset | Ch? server kh?i d?ng l?i (< 5s). Alert n?u tái di?n |
+| `4004` | `SAFE_VEHICLE_MOVING` | 403 | L?nh ghi b? t? ch?i vì xe dang di chuy?n (speed > 0) | D?ng xe hoàn toàn tru?c khi th?c hi?n l?nh c?u hình |
+
+**Ví d? response `4002`:**
+```json
+{ "error": "Signal BSW_FL_BuckleStatus is read-only (TX: false)", "code": 4002, "id": "SAFE_WRITE_DENIED" }
+```
+
+**Ví d? response `4004`:**
+```json
+{ "error": "Write denied: vehicle speed is 35 km/h", "code": 4004, "id": "SAFE_VEHICLE_MOVING" }
+```
+
+---
+
+## HTTP Status Codes — Mapping
+
+| HTTP | App Codes | Khi nào |
+|------|-----------|---------|
+| `200 OK` | — / `2004` | GET thành công; GPS no-fix (data v?n tr? v?) |
+| `201 Created` | — | `POST /api/profile` t?o m?i thành công |
+| `202 Accepted` | — | Signal write queued thành công |
+| `204 No Content` | — | `DELETE /api/profile/{name}` xóa thành công |
+| `400 Bad Request` | `3001`, `3002` | JSON sai / thi?u field |
+| `401 Unauthorized` | `4001` | API Key l?i |
+| `403 Forbidden` | `4002`, `4004` | Signal read-only / xe dang ch?y |
+| `404 Not Found` | `3004` | Resource không t?n t?i |
+| `409 Conflict` | `3005` | Tên trùng / section_id mismatch |
+| `422 Unprocessable` | `3003` | Value out of range |
+| `500 Server Error` | `1000`, `4003` | L?i n?i b? / watchdog |
+| `503 Unavailable` | `1001`, `1002`, `2001`, `2003` | DB locked / maintenance / hardware |
+| `504 Gateway Timeout` | `2002` | ECU XCP timeout |
+
+---
+
+## Optimistic Locking — `section_id` (3005 / 409)
+
+`section_id` là s? nguyên tang d?n, dùng d? tránh race condition khi nhi?u client cùng ghi.
+
+```
+1. Client  GET /api/profile          ?  { section_id: 5, ... }
+2. Client  PUT /api/profile          ?  g?i kèm { section_id: 5, ... }
+3a. OK     section_id = 5 trên server ?  200 OK, section_id tang thành 6
+3b. FAIL   Client khác dã PUT tru?c  ?  409 { code: 3005, id: "VAL_CONFLICT",
+                                             "error": "section_id mismatch: expected 6, got 5" }
+4. X? lý 409: GET l?i d? l?y section_id m?i, r?i retry PUT
+```
+
+Các endpoint c?n `section_id`: `PUT /api/profile`, `PUT /config`
+
+---
+
+## WebSocket Close Codes (`wss://…/ws/signals`)
+
+| WS Code | Tên | Nguyên nhân |
+|---------|-----|-------------|
+| `1000` | Normal Closure | Server / client dóng ch? d?ng (bình thu?ng) |
+| `1001` | Going Away | Server dang restart / deploy |
+| `1006` | Abnormal Closure | M?t m?ng d?t ng?t (không có CLOSE frame) |
+| `1008` | Policy Violation | Xác th?c th?t b?i (reserved) |
+| `1011` | Internal Error | Server l?i trong khi stream (`1000` / `4003`) |
+
+**Chi?n lu?c reconnect (exponential backoff):**
+
+```js
+let retryDelay = 1000;
+function connect() {
+  const ws = new WebSocket("wss://your-app.render.com/ws/signals");
+  ws.addEventListener("open",  () => { retryDelay = 1000; });
+  ws.addEventListener("close", (e) => {
+    if (e.code !== 1000) {
+      setTimeout(() => { retryDelay = Math.min(retryDelay * 2, 30000); connect(); }, retryDelay);
+    }
+  });
+}
+```
+
+---
+
+## Signal Write — Lu?ng Debug
+
+```
+PUT /signals/SomeName  ?  404 / 3004  ?  Signal không có trong signal.json
+PUT /signals/SomeName  ?  403 / 4002  ?  TX: false (sensor, không ghi du?c)
+PUT /signals/SomeName  ?  403 / 4004  ?  Xe dang ch?y, l?nh b? block
+PUT /signals/SomeName  ?  422 / 3003  ?  Value ngoài [min, max]
+PUT /signals/SomeName  ?  202         ?  OK, dã queue g?i CAN
+
+POST /signals/batch_update  ?  202  ?  K?t qu? t?ng signal trong "results":
+    { name, value, status: "ok" | "not_writable" | "not_found" | "out_of_range" }
+```
+
+---
+
+## Ví D? Response Ð?y Ð?
+
+### 201 — T?o profile thành công
+```json
+{ "profile_name": "Driver_A", "signals": ["HB_FL_ActivationLevel", "BSW_FL_BuckleStatus"], "selected": false }
+```
+
+### 202 — Signal write accepted
+```json
+{ "signal_name": "HB_FL_ActivationLevel", "value": 3, "queued_at": 1717243200.123 }
+```
+
+### 202 — Batch write accepted
+```json
+{
+  "status": "queued",
+  "count": 3,
+  "results": [
+    { "name": "HB_FL_ActivationLevel", "value": 3, "status": "ok" },
+    { "name": "BSW_FL_BuckleStatus",   "value": 1, "status": "not_writable" },
+    { "name": "UnknownSignal",         "value": 0, "status": "not_found" }
+  ]
+}
+```
+
+### 400 — Thi?u tru?ng b?t bu?c
+```json
+{ "error": "Missing required field: profile_name", "code": 3002, "id": "VAL_MISSING_FIELD" }
+```
+
+### 403 — Signal read-only
+```json
+{ "error": "Signal BSW_FL_BuckleStatus is read-only (TX: false)", "code": 4002, "id": "SAFE_WRITE_DENIED" }
+```
+
+### 404 — Không tìm th?y
+```json
+{ "error": "Signal 'UnknownSignal' not found", "code": 3004, "id": "VAL_NOT_FOUND" }
+```
+
+### 409 — section_id mismatch
+```json
+{ "error": "section_id mismatch: expected 7, got 5", "code": 3005, "id": "VAL_CONFLICT" }
+```
+
+### 422 — Value out of range
+```json
+{ "error": "Value 10 is out of range [0, 7] for HB_FL_ActivationLevel", "code": 3003, "id": "VAL_OUT_OF_RANGE" }
+```
+
+### 503 — Hardware down
+```json
+{ "error": "SocketCAN interface vcan0 is down", "code": 2001, "id": "HW_CAN_ERROR" }
+```

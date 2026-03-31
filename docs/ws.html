@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CAN-HMI — WebSocket Endpoint</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #1a1d27;
+      --surf2:   #232635;
+      --border:  #2e3248;
+      --accent:  #4f8ef7;
+      --green:   #3dd68c;
+      --yellow:  #f5c542;
+      --red:     #f76f6f;
+      --purple:  #b47cf7;
+      --muted:   #6b7280;
+      --text:    #e2e8f0;
+      --dim:     #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      font-family: "Fira Code", "Cascadia Code", monospace;
+      background: var(--surf2);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    /* ── Header ── */
+    .app-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 32px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .app-header .logo { font-size: 17px; font-weight: 700; }
+    .app-header .tag {
+      font-size: 10px;
+      background: var(--surf2);
+      border: 1px solid var(--border);
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: var(--muted);
+    }
+    .app-header nav { margin-left: auto; display: flex; gap: 20px; }
+    .app-header nav a { color: var(--accent); font-size: 13px; }
+
+    /* ── Layout ── */
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 230px;
+      min-width: 230px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 0;
+      position: sticky;
+      top: 46px;
+      height: calc(100vh - 46px);
+      overflow-y: auto;
+    }
+    .sidebar-sec {
+      padding: 8px 20px 2px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 12px;
+    }
+    .sidebar a {
+      display: block;
+      padding: 6px 20px;
+      color: var(--dim);
+      font-size: 13px;
+    }
+    .sidebar a:hover { background: var(--surf2); color: var(--text); text-decoration: none; }
+    .content { flex: 1; max-width: 860px; padding: 40px 48px; }
+
+    /* ── Sections ── */
+    section { margin-bottom: 56px; }
+    h1 { font-size: 26px; font-weight: 800; margin-bottom: 8px; }
+    h2 { font-size: 19px; font-weight: 700; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 14px; font-weight: 700; margin-bottom: 8px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+    p  { color: var(--dim); margin-bottom: 12px; }
+
+    /* ── URL box ── */
+    .url-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--purple);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-bottom: 24px;
+    }
+    .url-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .ws-pill {
+      background: #2a1a4a;
+      color: var(--purple);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: .04em;
+      flex-shrink: 0;
+    }
+    .url-text {
+      font-family: monospace;
+      font-size: 15px;
+      color: var(--purple);
+      word-break: break-all;
+    }
+    .url-note { font-size: 12px; color: var(--muted); }
+
+    /* ── Info / warn box ── */
+    .info-box {
+      background: #162035;
+      border: 1px solid #2a4060;
+      border-left: 3px solid var(--accent);
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--dim);
+      margin-bottom: 16px;
+    }
+    .info-box strong { color: var(--text); }
+    .warn-box {
+      background: #20180a;
+      border: 1px solid #5a3c10;
+      border-left: 3px solid var(--yellow);
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--dim);
+      margin-bottom: 16px;
+    }
+    .warn-box strong { color: var(--yellow); }
+
+    /* ── Code block ── */
+    .code-block {
+      background: #0a0c13;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 18px;
+      font-family: "Fira Code", "Cascadia Code", monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      overflow-x: auto;
+      white-space: pre;
+      color: #a8b8d8;
+      margin-bottom: 16px;
+    }
+    .code-block .c-kw  { color: #c792ea; }
+    .code-block .c-fn  { color: #82aaff; }
+    .code-block .c-str { color: #c3e88d; }
+    .code-block .c-num { color: #f78c6c; }
+    .code-block .c-cmt { color: #546e7a; }
+    .code-block .c-key { color: #7eb8f7; }
+
+    /* ── Tab bar ── */
+    .tab-bar { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .tab-btn {
+      padding: 8px 18px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ── Live demo ── */
+    .demo-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .demo-header {
+      background: var(--surf2);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .demo-title { font-size: 13px; font-weight: 600; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background .3s; }
+    .status-dot.ok     { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .status-dot.warn   { background: var(--yellow); }
+    .status-dot.error  { background: var(--red); }
+    .status-label { font-size: 12px; color: var(--dim); }
+    .demo-controls { padding: 14px 20px; display: flex; gap: 10px; border-bottom: 1px solid var(--border); }
+    .btn {
+      padding: 7px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surf2);
+      color: var(--text);
+      transition: background .15s;
+    }
+    .btn:hover { background: #2e3555; }
+    .btn-green { background: #1a3d2c; border-color: var(--green); color: var(--green); }
+    .btn-green:hover { background: #1e4a33; }
+    .btn-red   { background: #3d1010; border-color: var(--red); color: var(--red); }
+    .btn-red:hover { background: #4a1515; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .demo-log {
+      height: 280px;
+      overflow-y: auto;
+      padding: 12px 16px;
+      font-family: "Fira Code", "Cascadia Code", monospace;
+      font-size: 11px;
+      line-height: 1.7;
+      background: #0a0c13;
+    }
+    .log-entry { display: flex; gap: 10px; margin-bottom: 4px; }
+    .log-ts  { color: var(--muted); flex-shrink: 0; min-width: 80px; }
+    .log-dir { flex-shrink: 0; min-width: 50px; }
+    .log-dir.rx { color: var(--green); }
+    .log-dir.tx { color: var(--accent); }
+    .log-dir.ev { color: var(--yellow); }
+    .log-dir.er { color: var(--red); }
+    .log-body { color: #a8b8d8; white-space: pre-wrap; word-break: break-all; }
+    .demo-stats {
+      padding: 10px 20px;
+      font-size: 11px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 20px;
+    }
+    .demo-stats span strong { color: var(--text); }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      background: var(--surf2);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--dim);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    .tbl-wrap { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+
+    @media (max-width: 700px) {
+      .sidebar { display: none; }
+      .content { padding: 24px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header class="app-header">
+  <span class="logo">&#x1F697; CAN-HMI</span>
+  <span class="tag">WebSocket Docs</span>
+  <nav>
+    <a href="/">&#8592; Demo</a>
+    <a href="/docs">Swagger API &#8599;</a>
+  </nav>
+</header>
+
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar">
+    <div class="sidebar-sec">Overview</div>
+    <a href="#overview">Introduction</a>
+    <a href="#endpoint">Endpoint URL</a>
+    <a href="#lifecycle">Connection Lifecycle</a>
+
+    <div class="sidebar-sec">Messages</div>
+    <a href="#msg-server">Server &#8594; Client</a>
+    <a href="#msg-client">Client &#8594; Server</a>
+    <a href="#msg-errors">Error Handling</a>
+
+    <div class="sidebar-sec">Integration</div>
+    <a href="#code-js">JavaScript</a>
+    <a href="#code-python">Python</a>
+
+    <div class="sidebar-sec">Demo</div>
+    <a href="#live-demo">Live Tester</a>
+  </nav>
+
+  <!-- ── Content ── -->
+  <main class="content">
+
+    <!-- HERO -->
+    <div id="overview" style="margin-bottom:48px; padding-bottom:28px; border-bottom:1px solid var(--border)">
+      <h1>WebSocket Endpoint</h1>
+      <p style="font-size:15px">Realtime CAN signal stream — BE push updates theo <code>sampling_rate</code> của active config. FE chỉ cần giữ một kết nối duy nhất để nhận tất cả signals.</p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px">
+        <a class="btn btn-green" href="#live-demo">&#9654; Live Demo</a>
+        <a class="btn" href="/docs">REST API Swagger &#8599;</a>
+        <a class="btn" href="/">Demo App &#8592;</a>
+      </div>
+    </div>
+
+    <!-- ENDPOINT URL -->
+    <section id="endpoint">
+      <h2>Endpoint URL</h2>
+
+      <div class="url-card">
+        <div class="url-row">
+          <span class="ws-pill">WSS</span>
+          <span class="url-text">wss://your-app.render.com/ws/signals</span>
+        </div>
+        <div class="url-note">Production (TLS). Thay <code>your-app.render.com</code> bằng domain thực của bạn.</div>
+      </div>
+
+      <div class="url-card" style="border-left-color:var(--accent)">
+        <div class="url-row">
+          <span class="ws-pill" style="background:#1a2a4a;color:var(--accent)">WS</span>
+          <span class="url-text" style="color:var(--accent)">ws://localhost:8000/ws/signals</span>
+        </div>
+        <div class="url-note">Local dev (non-TLS).</div>
+      </div>
+
+      <div class="warn-box">
+        <strong>&#9888; Demo này dùng MockWebSocket</strong> — không cần kết nối server thật.
+        Trang <a href="/">Demo app</a> và <a href="#live-demo">Live Tester</a> bên dưới đều dùng mock data từ <code>localStorage</code>.
+      </div>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Thuộc tính</th><th>Giá trị</th></tr></thead>
+          <tbody>
+            <tr><td>Protocol</td><td><code>wss://</code> (production) / <code>ws://</code> (dev)</td></tr>
+            <tr><td>Path</td><td><code>/ws/signals</code></td></tr>
+            <tr><td>Direction</td><td>Server → Client (push only; xem <a href="#msg-client">Client → Server</a> cho ping)</td></tr>
+            <tr><td>Message format</td><td>JSON text</td></tr>
+            <tr><td>Interval</td><td><code>1000 / sampling_rate</code> ms — mặc định 100ms (100 Hz)</td></tr>
+            <tr><td>Authentication</td><td>None (demo). Production: <code>?token=&lt;jwt&gt;</code> query param</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- LIFECYCLE -->
+    <section id="lifecycle">
+      <h2>Connection Lifecycle</h2>
+      <div class="info-box">
+        <strong>Flow:</strong> Connect → nhận snapshot (optional, dùng <code>GET /signals</code>) → nhận push frames liên tục → reconnect khi bị ngắt.
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Event</th><th>FE action</th></tr></thead>
+          <tbody>
+            <tr><td><code>onopen</code></td><td>Gọi <code>GET /signals</code> để lấy snapshot ban đầu, cập nhật UI badge "Connected"</td></tr>
+            <tr><td><code>onmessage</code></td><td>Parse JSON, cập nhật signal values trên Dashboard</td></tr>
+            <tr><td><code>onclose</code></td><td>Show "Reconnecting…", sau 2–5s gọi <code>new WebSocket(...)</code></td></tr>
+            <tr><td><code>onerror</code></td><td>Log lỗi, trigger reconnect</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SERVER → CLIENT -->
+    <section id="msg-server">
+      <h2>Server → Client Messages</h2>
+      <p>BE push một JSON frame mỗi interval. Chỉ các signals thay đổi được gửi (delta) hoặc tất cả signals (full), tùy implementation.</p>
+
+      <h3>Signal Update Frame</h3>
+      <div class="code-block">{
+  <span class="c-key">"timestamp"</span>: <span class="c-str">"2024-06-01T12:00:00.123Z"</span>,   <span class="c-cmt">// ISO 8601 UTC</span>
+  <span class="c-key">"signals"</span>: [
+    { <span class="c-key">"name"</span>: <span class="c-str">"EngineSpeed"</span>,           <span class="c-key">"value"</span>: <span class="c-num">3150</span>  },
+    { <span class="c-key">"name"</span>: <span class="c-str">"CoolantTemp"</span>,            <span class="c-key">"value"</span>: <span class="c-num">91</span>    },
+    { <span class="c-key">"name"</span>: <span class="c-str">"HB_FL_ActivationLevel"</span>,  <span class="c-key">"value"</span>: <span class="c-num">2</span>     },
+    { <span class="c-key">"name"</span>: <span class="c-str">"HB_FR_ActivationLevel"</span>,  <span class="c-key">"value"</span>: <span class="c-num">0</span>     },
+    { <span class="c-key">"name"</span>: <span class="c-str">"BrakePressure"</span>,          <span class="c-key">"value"</span>: <span class="c-num">45.8</span>  },
+    { <span class="c-key">"name"</span>: <span class="c-str">"BatteryVoltage"</span>,         <span class="c-key">"value"</span>: <span class="c-num">12.61</span> },
+    { <span class="c-key">"name"</span>: <span class="c-str">"FuelLevel"</span>,              <span class="c-key">"value"</span>: <span class="c-num">67.8</span>  }
+  ]
+}</div>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Type</th><th>Mô tả</th></tr></thead>
+          <tbody>
+            <tr><td><code>timestamp</code></td><td>string (ISO 8601)</td><td>Thời điểm frame được tạo, UTC</td></tr>
+            <tr><td><code>signals[]</code></td><td>array</td><td>Danh sách signal updates trong frame này</td></tr>
+            <tr><td><code>signals[].name</code></td><td>string</td><td>Tên signal — khớp với <code>GET /signals/available</code></td></tr>
+            <tr><td><code>signals[].value</code></td><td>number</td><td>Giá trị hiện tại. Enum signals: integer (index của state)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- CLIENT → SERVER -->
+    <section id="msg-client">
+      <h2>Client → Server Messages</h2>
+      <p>Trong demo này, WS là <strong>server-push only</strong>. Để ghi signal, dùng REST <code>PUT /signals/{name}</code> hoặc <code>POST /signals/batch_update</code>.</p>
+
+      <div class="info-box">
+        <strong>Ping / Keepalive:</strong> Có thể gửi JSON <code>{"type":"ping"}</code> để giữ kết nối sống.
+        Server sẽ ignore hoặc respond <code>{"type":"pong"}</code> tùy implementation.
+      </div>
+      <div class="code-block"><span class="c-cmt">// Ping (optional keepalive)</span>
+ws.send(JSON.stringify({ <span class="c-key">"type"</span>: <span class="c-str">"ping"</span> }));
+<span class="c-cmt">// ← Server responds: { "type": "pong" }</span></div>
+    </section>
+
+    <!-- ERROR HANDLING -->
+    <section id="msg-errors">
+      <h2>Error Handling &amp; Reconnect</h2>
+      <div class="warn-box">
+        <strong>&#9888; Browser WebSocket không có built-in reconnect.</strong>
+        FE phải tự implement exponential backoff.
+      </div>
+      <div class="code-block"><span class="c-kw">function</span> <span class="c-fn">connectWS</span>(retryMs = <span class="c-num">2000</span>) {
+  <span class="c-kw">const</span> ws = <span class="c-kw">new</span> <span class="c-fn">WebSocket</span>(<span class="c-str">"wss://your-app.render.com/ws/signals"</span>);
+
+  ws.onopen = () => { retryMs = <span class="c-num">2000</span>; <span class="c-fn">console.log</span>(<span class="c-str">"WS connected"</span>); };
+
+  ws.onclose = () => {
+    <span class="c-fn">console.warn</span>(<span class="c-str">`WS closed, retry in ${retryMs}ms`</span>);
+    <span class="c-fn">setTimeout</span>(() => <span class="c-fn">connectWS</span>(Math.<span class="c-fn">min</span>(retryMs * <span class="c-num">2</span>, <span class="c-num">30000</span>)), retryMs);
+  };
+
+  ws.onerror = (e) => <span class="c-fn">console.error</span>(<span class="c-str">"WS error"</span>, e);
+  <span class="c-kw">return</span> ws;
+}</div>
+    </section>
+
+    <!-- CODE EXAMPLES -->
+    <section id="code-js">
+      <h2>JavaScript Integration</h2>
+
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab(this,'js-vanilla')">Vanilla JS</button>
+        <button class="tab-btn"        onclick="switchTab(this,'js-react')">React Hook</button>
+      </div>
+
+      <div id="tab-js-vanilla" class="tab-pane active">
+        <div class="code-block"><span class="c-cmt">// 1. On app startup — fetch metadata once</span>
+<span class="c-kw">const</span> res = <span class="c-kw">await</span> <span class="c-fn">fetch</span>(<span class="c-str">"/signals/available"</span>);
+<span class="c-kw">const</span> { signals_info } = <span class="c-kw">await</span> res.<span class="c-fn">json</span>();
+<span class="c-cmt">// signals_info: [{ name, unit, min, max, writable, states, value }, ...]</span>
+
+<span class="c-cmt">// 2. Connect WebSocket</span>
+<span class="c-kw">const</span> ws = <span class="c-kw">new</span> <span class="c-fn">WebSocket</span>(<span class="c-str">"wss://your-app.render.com/ws/signals"</span>);
+
+ws.onopen = () => {
+  badge.<span class="c-fn">textContent</span> = <span class="c-str">"● Connected"</span>;
+};
+
+ws.onmessage = (event) => {
+  <span class="c-kw">const</span> { timestamp, signals } = JSON.<span class="c-fn">parse</span>(event.data);
+
+  signals.<span class="c-fn">forEach</span>(({ name, value }) => {
+    <span class="c-kw">const</span> el = document.<span class="c-fn">getElementById</span>(<span class="c-str">`sig-${name}`</span>);
+    <span class="c-kw">if</span> (el) el.textContent = value;
+  });
+};
+
+ws.onclose = () => { <span class="c-cmt">/* reconnect logic */</span> };
+
+<span class="c-cmt">// 3. Write writable signal (REST, not WS)</span>
+<span class="c-kw">async function</span> <span class="c-fn">writeSignal</span>(name, value) {
+  <span class="c-kw">await</span> <span class="c-fn">fetch</span>(<span class="c-str">`/signals/${name}`</span>, {
+    method: <span class="c-str">"PUT"</span>,
+    headers: { <span class="c-str">"Content-Type"</span>: <span class="c-str">"application/json"</span> },
+    body: JSON.<span class="c-fn">stringify</span>({ name, value, timestamp: <span class="c-kw">new</span> <span class="c-fn">Date</span>().<span class="c-fn">toISOString</span>() })
+  });
+}</div>
+      </div>
+
+      <div id="tab-js-react" class="tab-pane">
+        <div class="code-block"><span class="c-kw">import</span> { useEffect, useRef, useState } <span class="c-kw">from</span> <span class="c-str">"react"</span>;
+
+<span class="c-kw">export function</span> <span class="c-fn">useCANSignals</span>(url = <span class="c-str">"wss://your-app.render.com/ws/signals"</span>) {
+  <span class="c-kw">const</span> [signals, setSignals] = <span class="c-fn">useState</span>({});
+  <span class="c-kw">const</span> wsRef = <span class="c-fn">useRef</span>(<span class="c-kw">null</span>);
+
+  <span class="c-fn">useEffect</span>(() => {
+    <span class="c-kw">let</span> retryMs = <span class="c-num">2000</span>;
+    <span class="c-kw">let</span> timer;
+
+    <span class="c-kw">function</span> <span class="c-fn">connect</span>() {
+      <span class="c-kw">const</span> ws = <span class="c-kw">new</span> <span class="c-fn">WebSocket</span>(url);
+      wsRef.current = ws;
+
+      ws.onmessage = (e) => {
+        <span class="c-kw">const</span> { signals: updates } = JSON.<span class="c-fn">parse</span>(e.data);
+        <span class="c-fn">setSignals</span>(prev => {
+          <span class="c-kw">const</span> next = { ...prev };
+          updates.<span class="c-fn">forEach</span>(s => { next[s.name] = s.value; });
+          <span class="c-kw">return</span> next;
+        });
+      };
+
+      ws.onclose = () => {
+        timer = <span class="c-fn">setTimeout</span>(() => { retryMs = Math.<span class="c-fn">min</span>(retryMs*<span class="c-num">2</span>, <span class="c-num">30000</span>); <span class="c-fn">connect</span>(); }, retryMs);
+      };
+    }
+
+    <span class="c-fn">connect</span>();
+    <span class="c-kw">return</span> () => { wsRef.current?.<span class="c-fn">close</span>(); <span class="c-fn">clearTimeout</span>(timer); };
+  }, [url]);
+
+  <span class="c-kw">return</span> signals; <span class="c-cmt">// { EngineSpeed: 3150, CoolantTemp: 91, ... }</span>
+}</div>
+      </div>
+    </section>
+
+    <section id="code-python">
+      <h2>Python Integration</h2>
+      <div class="code-block"><span class="c-cmt"># pip install websockets</span>
+<span class="c-kw">import</span> asyncio, json, websockets
+
+<span class="c-kw">async def</span> <span class="c-fn">listen_signals</span>():
+    uri = <span class="c-str">"wss://your-app.render.com/ws/signals"</span>
+    <span class="c-kw">async with</span> websockets.<span class="c-fn">connect</span>(uri) <span class="c-kw">as</span> ws:
+        <span class="c-kw">async for</span> message <span class="c-kw">in</span> ws:
+            frame = json.<span class="c-fn">loads</span>(message)
+            <span class="c-kw">for</span> sig <span class="c-kw">in</span> frame[<span class="c-str">"signals"</span>]:
+                <span class="c-fn">print</span>(<span class="c-str">f"{sig['name']}: {sig['value']}"</span>)
+
+asyncio.<span class="c-fn">run</span>(<span class="c-fn">listen_signals</span>())</div>
+    </section>
+
+    <!-- LIVE DEMO -->
+    <section id="live-demo">
+      <h2>Live Tester (Mock)</h2>
+      <p>Connects to <strong>MockWebSocket</strong> — data được simulate trong browser, không cần server thật.</p>
+
+      <div class="demo-card">
+        <div class="demo-header">
+          <div class="status-dot" id="dot"></div>
+          <span class="demo-title">ws://localhost:8000/ws/signals</span>
+          <span class="status-label" id="status-label">Disconnected</span>
+        </div>
+        <div class="demo-controls">
+          <button class="btn btn-green" id="btn-connect">&#9654; Connect</button>
+          <button class="btn btn-red"   id="btn-disconnect" disabled>&#9646;&#9646; Disconnect</button>
+          <button class="btn"           id="btn-clear">Clear log</button>
+        </div>
+        <div class="demo-log" id="log"></div>
+        <div class="demo-stats">
+          <span>Messages: <strong id="stat-msgs">0</strong></span>
+          <span>Signals/frame: <strong id="stat-sigs">—</strong></span>
+          <span>Interval: <strong id="stat-interval">—</strong></span>
+        </div>
+      </div>
+    </section>
+
+    <div style="color:var(--muted);font-size:12px;padding-top:20px;border-top:1px solid var(--border)">
+      CAN-HMI API Demo · WebSocket Docs · 2026
+    </div>
+  </main>
+</div>
+
+<script>
+// ── Tab switcher ──────────────────────────────────────────────────────────────
+function switchTab(btn, id) {
+  btn.closest('.tab-bar').querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const pane = btn.closest('section');
+  pane.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+}
+
+// ── Smooth scroll ─────────────────────────────────────────────────────────────
+document.querySelectorAll('.sidebar a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const t = document.querySelector(a.getAttribute('href'));
+    if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+
+// ── Minimal MockWebSocket (self-contained, no dependency on mock.js) ──────────
+const SIGNALS_META = [
+  { name: "EngineSpeed",           min: 0,  max: 8000, enum: false },
+  { name: "CoolantTemp",           min: 0,  max: 120,  enum: false },
+  { name: "HB_FL_ActivationLevel", min: 0,  max: 7,    enum: true  },
+  { name: "HB_FR_ActivationLevel", min: 0,  max: 7,    enum: true  },
+  { name: "BrakePressure",         min: 0,  max: 200,  enum: false },
+  { name: "BatteryVoltage",        min: 9,  max: 16,   enum: false },
+  { name: "FuelLevel",             min: 0,  max: 100,  enum: false },
+];
+
+let _vals = {};
+SIGNALS_META.forEach(s => {
+  _vals[s.name] = s.enum ? 0 : +((s.min + s.max) / 2).toFixed(2);
+});
+
+class DemoWS {
+  constructor() {
+    this._tid = null;
+    this.onopen = null; this.onmessage = null; this.onclose = null;
+    setTimeout(() => this.onopen?.(), 300 + Math.random()*200);
+    this._tid = setInterval(() => this._push(), 500);
+  }
+  _push() {
+    const updates = [];
+    SIGNALS_META.forEach(s => {
+      if (s.enum) { updates.push({ name: s.name, value: _vals[s.name] }); return; }
+      const range = s.max - s.min;
+      const nv = +Math.max(s.min, Math.min(s.max, _vals[s.name] + (Math.random()-0.5)*range*0.025)).toFixed(2);
+      _vals[s.name] = nv;
+      updates.push({ name: s.name, value: nv });
+    });
+    this.onmessage?.({ data: JSON.stringify({ timestamp: new Date().toISOString(), signals: updates }) });
+  }
+  close() { clearInterval(this._tid); setTimeout(() => this.onclose?.(), 50); }
+}
+
+// ── Live demo controls ────────────────────────────────────────────────────────
+const logEl     = document.getElementById('log');
+const dot       = document.getElementById('dot');
+const statusLbl = document.getElementById('status-label');
+const btnConn   = document.getElementById('btn-connect');
+const btnDisc   = document.getElementById('btn-disconnect');
+const btnClear  = document.getElementById('btn-clear');
+const statMsgs  = document.getElementById('stat-msgs');
+const statSigs  = document.getElementById('stat-sigs');
+const statIntvl = document.getElementById('stat-interval');
+
+let ws = null;
+let msgCount = 0;
+let lastTs = null;
+
+function ts() {
+  return new Date().toLocaleTimeString('en-GB', { hour12: false });
+}
+
+function addLog(dir, text, cls) {
+  const row = document.createElement('div');
+  row.className = 'log-entry';
+  row.innerHTML = `<span class="log-ts">${ts()}</span><span class="log-dir ${cls}">${dir}</span><span class="log-body">${text}</span>`;
+  logEl.prepend(row);
+  if (logEl.children.length > 120) logEl.lastChild.remove();
+}
+
+function setStatus(state) {
+  dot.className = 'status-dot ' + state;
+  const labels = { ok: 'Connected', warn: 'Connecting…', '': 'Disconnected', error: 'Error' };
+  statusLbl.textContent = labels[state] ?? 'Disconnected';
+}
+
+btnConn.addEventListener('click', () => {
+  if (ws) return;
+  setStatus('warn');
+  btnConn.disabled = true;
+  addLog('EVENT', 'Connecting to ws://localhost:8000/ws/signals …', 'ev');
+
+  ws = new DemoWS();
+
+  ws.onopen = () => {
+    setStatus('ok');
+    btnDisc.disabled = false;
+    lastTs = Date.now();
+    addLog('EVENT', 'Connected ✓', 'ev');
+    statIntvl.textContent = '~500ms (mock)';
+  };
+
+  ws.onmessage = (e) => {
+    msgCount++;
+    statMsgs.textContent = msgCount;
+    const frame = JSON.parse(e.data);
+    statSigs.textContent = frame.signals.length;
+    const preview = frame.signals.slice(0, 3).map(s => `${s.name}: ${s.value}`).join(', ');
+    addLog('RX ←', preview + (frame.signals.length > 3 ? ` (+${frame.signals.length-3} more)` : ''), 'rx');
+  };
+
+  ws.onclose = () => {
+    ws = null;
+    setStatus('');
+    btnConn.disabled = false;
+    btnDisc.disabled = true;
+    addLog('EVENT', 'Disconnected', 'ev');
+    statIntvl.textContent = '—';
+  };
+});
+
+btnDisc.addEventListener('click', () => {
+  ws?.close();
+});
+
+btnClear.addEventListener('click', () => {
+  logEl.innerHTML = '';
+  msgCount = 0;
+  statMsgs.textContent = '0';
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+    "section_id": 123,
+    "hardware": {
+        "can_bus": {
+            "can0": {
+                "bitrate": 500000,
+                "retry_limit": 3,
+                "rate_limit_ms": 100,
+                "dbc_file": ["/opt/carpc/assets/vehicle1.dbc", "/opt/carpc/assets/vehicle2.dbc"]
+            },
+            "can1": {
+                "bitrate": 500000,
+                "retry_limit": 3,
+                "rate_limit_ms": 100,
+                "dbc_file": ["/opt/carpc/assets/vehicle3.dbc", "/opt/carpc/assets/vehicle4.dbc"]
+            }
+        }
+    },
+    "storage": {
+        "log_level": "DEBUG",
+        "retention_days": 30
+    },
+    "safety": {
+        "speed_limit_max": 200,
+        "temp_threshold_critical": 105,
+        "write_access_enabled": true
+    }
+}

@@ -5,29 +5,35 @@
  */
 
 // ── Default data ──────────────────────────────────────────────────────────────
-const _SIGNALS_META = [
-  { name: "EngineSpeed",           unit: "rpm", min: 0,   max: 8000, writable: false, description: "Engine speed in revolutions per minute",
-    states: [] },
-  { name: "CoolantTemp",           unit: "°C",  min: 0,   max: 120,  writable: false, description: "Coolant temperature in degree Celsius",
-    states: [] },
-  { name: "HB_FL_ActivationLevel", unit: "",    min: 0,   max: 7,    writable: true,  description: "HB Front-Left Activation Level",
-    states: Array.from({ length: 8 }, (_, i) => ({ value: i, description: `Level ${i + 1}` })) },
-  { name: "HB_FR_ActivationLevel", unit: "",    min: 0,   max: 7,    writable: true,  description: "HB Front-Right Activation Level",
-    states: Array.from({ length: 8 }, (_, i) => ({ value: i, description: `Level ${i + 1}` })) },
-  { name: "BrakePressure",         unit: "bar", min: 0,   max: 200,  writable: false, description: "Brake line pressure",
-    states: [] },
-  { name: "BatteryVoltage",        unit: "V",   min: 9,   max: 16,   writable: false, description: "12V battery voltage",
-    states: [] },
-  { name: "FuelLevel",             unit: "%",   min: 0,   max: 100,  writable: false, description: "Fuel level percentage",
-    states: [] },
+// Populated asynchronously by Store.init() from candb/signal.json
+let _SIGNALS_META = [];
+let _INFO_DATA = null;    // populated from data/info.json
+let _CONFIG_DATA = null;  // populated from data/config.json
+
+// Fallback used only if signal.json cannot be fetched (e.g. bare file:// open)
+const _FALLBACK_SIGNALS_META = [
+  { name: "EngineSpeed",  unit: "rpm", min: 0, max: 8000, writable: false, description: "Engine speed", states: [] },
+  { name: "CoolantTemp",  unit: "°C",  min: 0, max: 120,  writable: false, description: "Coolant temperature", states: [] },
+  { name: "BrakePressure",unit: "bar", min: 0, max: 200,  writable: false, description: "Brake pressure", states: [] },
+  { name: "HB_FL_ActivationLevel", unit: "", min: 0, max: 7, writable: true,
+    description: "HB Front-Left Activation Level",
+    states: Array.from({ length: 8 }, (_, i) => ({ value: i, description: `Level ${i+1}` })) },
 ];
 
-const _DEFAULT_PROFILES = [
-  { profile_name: "Dev", signals: _SIGNALS_META.map(s => s.name), selected: true  },
-  { profile_name: "U0",  signals: ["EngineSpeed","CoolantTemp","HB_FL_ActivationLevel","HB_FR_ActivationLevel"], selected: false },
-  { profile_name: "U1",  signals: ["EngineSpeed","CoolantTemp"], selected: false },
-  { profile_name: "U2",  signals: ["HB_FL_ActivationLevel","HB_FR_ActivationLevel"], selected: false },
-];
+// Built lazily inside _defaults() so it can use the populated _SIGNALS_META
+function _defaultProfiles() {
+  const allNames = _SIGNALS_META.map(s => s.name);
+  // Pick a small representative subset for demo profiles
+  const subset = allNames.filter(n =>
+    ["HB_FL_ActivationLevel","HB_FR_ActivationLevel","WMS_FL_WebbingMovement","SPS_FL_SeatPositionX"].includes(n)
+  ).slice(0, 4);
+  return [
+    { profile_name: "Dev", signals: allNames,  selected: true  },
+    { profile_name: "U0",  signals: subset.length ? subset : allNames.slice(0, 4), selected: false },
+    { profile_name: "U1",  signals: allNames.slice(0, 2),  selected: false },
+    { profile_name: "U2",  signals: allNames.slice(0, 8),  selected: false },
+  ];
+}
 
 const _DEFAULT_CONFIGS = [
   { config_name: "high_load", sampling_rate: 100, RTSP_url: "rtsp://example.com/stream", WebRTC_url: "", selected: true  },
@@ -41,14 +47,24 @@ const Store = (() => {
   function _defaults() {
     const vals = {};
     _SIGNALS_META.forEach(s => {
-      const mid = (s.min + s.max) / 2;
-      // enum signals start at 0
-      const initVal = s.states.length ? 0 : +(mid + (Math.random() - 0.5) * mid * 0.4).toFixed(2);
+      let initVal;
+      if (s.states.length) {
+        // enum: pick a random valid state value
+        initVal = s.states[Math.floor(Math.random() * s.states.length)].value;
+      } else {
+        const mid = (s.min + s.max) / 2;
+        initVal = +(mid + (Math.random() - 0.5) * (s.max - s.min) * 0.4).toFixed(2);
+      }
       vals[s.name] = { value: initVal, timestamp: Date.now() / 1000 };
     });
+    // Seed profiles from info.json if available, else use generated defaults
+    const base = _INFO_DATA?.profiles
+      ? JSON.parse(JSON.stringify(_INFO_DATA.profiles))
+      : JSON.parse(JSON.stringify(_defaultProfiles()));
+    if (!base.some(p => p.selected)) base[0].selected = true;
     return {
       section_id: 1,
-      profiles:     JSON.parse(JSON.stringify(_DEFAULT_PROFILES)),
+      profiles:     base,
       configs:      JSON.parse(JSON.stringify(_DEFAULT_CONFIGS)),
       signals_meta: JSON.parse(JSON.stringify(_SIGNALS_META)),
       signal_values: vals,
@@ -62,7 +78,49 @@ const Store = (() => {
   function save()   { _save(); }
   function reset()  { localStorage.removeItem(SK); _data = null; }
 
-  return { get, save, reset };
+  /** Fetch signal.json and populate _SIGNALS_META. Must be awaited before first get(). */
+  async function init() {
+    try {
+      const resp = await fetch('candb/signal.json');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      _SIGNALS_META = json.signals.map(s => ({
+        name:        s.name,
+        unit:        s.unit        || '',
+        min:         s.min         ?? 0,
+        max:         s.max         ?? 100,
+        writable:    !!s.TX,
+        description: s.description || '',
+        states:      Array.isArray(s.states) ? s.states : [],
+      }));
+    } catch (e) {
+      console.warn('[Store.init] Could not load signal.json, using fallback signals.', e);
+      _SIGNALS_META = JSON.parse(JSON.stringify(_FALLBACK_SIGNALS_META));
+    }
+    // Fetch project info (non-critical — app works fine without it)
+    try {
+      const ir = await fetch('data/info.json');
+      if (ir.ok) {
+        const raw = await ir.json();
+        // Redact sensitive fields before caching
+        _INFO_DATA = { ...raw, server: raw.server ? { ...raw.server, api_key: '[REDACTED]' } : raw.server };
+      }
+    } catch (_) { /* silent — info is optional */ }
+    // Fetch editable config (non-critical)
+    try {
+      const cr = await fetch('data/config.json');
+      if (cr.ok) _CONFIG_DATA = await cr.json();
+    } catch (_) { /* silent */ }
+
+    // If localStorage has stale data (different signal count), reset it
+    const saved = _load();
+    if (saved && saved.signals_meta && saved.signals_meta.length !== _SIGNALS_META.length) {
+      localStorage.removeItem(SK);
+    }
+    _data = null; // force re-init with fresh meta
+  }
+
+  return { get, save, reset, init };
 })();
 
 // ── Logger ────────────────────────────────────────────────────────────────────
@@ -185,41 +243,68 @@ const MockAPI = {
 
   // ── Configs ────────────────────────────────────────────────────────────────
 
-  /** GET /configs — all configs */
+  /** GET /configs — full system info (project, hardware, server, storage, safety, video, profiles) */
   async getConfigs() {
     await delay();
+    if (!_INFO_DATA) {
+      Log.api("GET", "/configs", null, { error: "Info not available", code: 1000, id: "SYS_UNKNOWN" }, 503);
+      throw new Error("System info not available");
+    }
     const d = Store.get();
-    const res = { section_id: d.section_id, configs: d.configs };
+    const res = { ..._INFO_DATA, profiles: d.profiles, section_id: d.section_id };
     Log.api("GET", "/configs", null, res);
     return res;
   },
 
-  /** GET /config — active config */
+  /** GET /config — editable system config (hardware.can_bus, storage, safety) from config.json */
   async getConfig() {
     await delay();
     const d = Store.get();
-    const c = d.configs.find(c => c.selected) || d.configs[0];
-    const res = { section_id: d.section_id, ...c };
+    if (!_CONFIG_DATA) {
+      const err = { error: "Config not available", code: 1000, id: "SYS_UNKNOWN" };
+      Log.api("GET", "/config", null, err, 503);
+      throw new Error(err.error);
+    }
+    const res = { ..._CONFIG_DATA, section_id: d.section_id };
     Log.api("GET", "/config", null, res);
     return res;
   },
 
-  /** PUT /config  (section_id must match) */
+  /** PUT /config — deep-merge editable fields into config ({ section_id, hardware?, storage?, safety? }) */
   async updateConfig(payload) {
     await delay();
     const d = Store.get();
     if (payload.section_id !== d.section_id) {
-      const err = { error: `section_id mismatch: expected ${d.section_id}, got ${payload.section_id}` };
+      const err = { error: `section_id mismatch: expected ${d.section_id}, got ${payload.section_id}`, code: 3005, id: "VAL_CONFLICT" };
       Log.api("PUT", "/config", payload, err, 409);
       throw new Error(err.error);
     }
-    const idx = d.configs.findIndex(c => c.config_name === payload.config_name);
-    if (idx < 0) throw new Error("Config not found");
-    d.configs[idx] = { ...d.configs[idx], ...payload };
+    if (!_CONFIG_DATA) {
+      const err = { error: "Config not available", code: 1000, id: "SYS_UNKNOWN" };
+      Log.api("PUT", "/config", payload, err, 503);
+      throw new Error(err.error);
+    }
+    // Deep-merge only the allowed top-level sections
+    function deepMerge(target, src) {
+      if (!src || typeof src !== 'object') return;
+      for (const k of Object.keys(src)) {
+        if (src[k] !== null && typeof src[k] === 'object' && !Array.isArray(src[k])) {
+          if (!target[k]) target[k] = {};
+          deepMerge(target[k], src[k]);
+        } else {
+          target[k] = src[k];
+        }
+      }
+    }
+    const allowed = ['hardware', 'storage', 'safety'];
+    for (const key of allowed) {
+      if (payload[key] !== undefined) deepMerge(_CONFIG_DATA[key], payload[key]);
+    }
     d.section_id++;
     Store.save();
-    Log.api("PUT", "/config", payload, d.configs[idx]);
-    return d.configs[idx];
+    const res = { ..._CONFIG_DATA, section_id: d.section_id };
+    Log.api("PUT", "/config", payload, res, 202);
+    return res;
   },
 
   /** Mark one config as selected */
@@ -269,6 +354,19 @@ const MockAPI = {
     const res = { signal_name: name, value: v, queued_at: Date.now() / 1000 };
     Log.api("PUT", `/signals/${name}`, { value }, res, 202);
     return res;
+  },
+
+  // ── Info ──────────────────────────────────────────────────────────────────
+
+  /** GET /api/info — project & hardware metadata (read-only) */
+  async getInfo() {
+    await delay(30);
+    if (!_INFO_DATA) {
+      Log.api("GET", "/api/info", null, { error: "Info not available", code: 1000, id: "SYS_UNKNOWN" }, 503);
+      throw new Error("System info not available");
+    }
+    Log.api("GET", "/api/info", null, _INFO_DATA);
+    return _INFO_DATA;
   },
 
   /** POST /signals/batch_update — sync multiple writable signals */
@@ -330,11 +428,21 @@ class MockWebSocket {
       const updates = [];
 
       d2.signals_meta.forEach(s => {
-        if (s.states.length > 0) return; // enum signals: skip auto-drift
+        // TX=true signals are HMI-controlled — preserve whatever value was set, no auto-drift
+        if (s.writable) return;
         const cur = d2.signal_values[s.name]?.value ?? (s.min + s.max) / 2;
-        const range = s.max - s.min;
-        const drift = (Math.random() - 0.5) * range * 0.025;
-        const nv = +Math.max(s.min, Math.min(s.max, cur + drift)).toFixed(2);
+        let nv;
+        if (s.states.length > 0) {
+          // enum: 8% chance per tick to switch to a random valid state
+          if (Math.random() >= 0.08) return;
+          nv = s.states[Math.floor(Math.random() * s.states.length)].value;
+        } else {
+          // analog: random walk, step ≤ 10% of range between ticks
+          const range = s.max - s.min;
+          const maxStep = range * 0.10;
+          const drift = (Math.random() - 0.5) * 2 * maxStep;
+          nv = +Math.max(s.min, Math.min(s.max, cur + drift)).toFixed(2);
+        }
         d2.signal_values[s.name] = { value: nv, timestamp: Date.now() / 1000 };
         updates.push({ name: s.name, value: nv });
       });

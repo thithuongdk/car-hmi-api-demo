@@ -329,7 +329,7 @@
     <!-- HERO -->
     <div id="overview" style="margin-bottom:48px; padding-bottom:28px; border-bottom:1px solid var(--border)">
       <h1>WebSocket Endpoint</h1>
-      <p style="font-size:15px">Realtime CAN signal stream - BE push updates theo <code>sampling_rate</code> của active config. FE chỉ cần giữ một kết nối duy nhất để nhận tất cả signals.</p>
+      <p style="font-size:15px">Realtime CAN signal stream — the backend pushes updates at the <code>sampling_rate</code> of the active config. The frontend only needs one persistent connection to receive all signals.</p>
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px">
         <a class="btn btn-green" href="#live-demo">&#9654; Live Demo</a>
         <a class="btn" href="/docs">REST API Swagger &#8599;</a>
@@ -346,7 +346,7 @@
           <span class="ws-pill">WSS</span>
           <span class="url-text">wss://car-hmi-api-demo.onrender.com/ws/signals</span>
         </div>
-        <div class="url-note">Production (TLS). Thay <code>car-hmi-api-demo.onrender.com</code> bằng domain thực của bạn.</div>
+        <div class="url-note">Production (TLS). Replace <code>car-hmi-api-demo.onrender.com</code> with your actual domain.</div>
       </div>
 
       <div class="url-card" style="border-left-color:var(--accent)">
@@ -364,13 +364,13 @@
 
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Thuộc tính</th><th>Giá trị</th></tr></thead>
+          <thead><tr><th>Property</th><th>Value</th></tr></thead>
           <tbody>
             <tr><td>Protocol</td><td><code>wss://</code> (production) / <code>ws://</code> (dev)</td></tr>
             <tr><td>Path</td><td><code>/ws/signals</code></td></tr>
-            <tr><td>Direction</td><td>Server → Client (push only; xem <a href="#msg-client">Client → Server</a> cho ping)</td></tr>
+            <tr><td>Direction</td><td>Server → Client (push only; see <a href="#msg-client">Client → Server</a> for ping)</td></tr>
             <tr><td>Message format</td><td>JSON text</td></tr>
-            <tr><td>Interval</td><td><code>1000 / sampling_rate</code> ms - mặc định 100ms (100 Hz)</td></tr>
+            <tr><td>Interval</td><td><code>1000 / sampling_rate</code> ms — default 100 ms (100 Hz)</td></tr>
             <tr><td>Authentication</td><td>None (demo). Production: <code>?token=&lt;jwt&gt;</code> query param</td></tr>
           </tbody>
         </table>
@@ -381,16 +381,16 @@
     <section id="lifecycle">
       <h2>Connection Lifecycle</h2>
       <div class="info-box">
-        <strong>Flow:</strong> Connect → nhận snapshot (optional, dùng <code>GET /signals</code>) → nhận push frames liên tục → reconnect khi bị ngắt.
+        <strong>Flow:</strong> Connect → get snapshot (optional, use <code>GET /signals</code>) → receive push frames continuously → reconnect on disconnect.
       </div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Event</th><th>FE action</th></tr></thead>
+          <thead><tr><th>Event</th><th>Frontend action</th></tr></thead>
           <tbody>
-            <tr><td><code>onopen</code></td><td>Gọi <code>GET /signals</code> để lấy snapshot ban đầu, cập nhật UI badge "Connected"</td></tr>
-            <tr><td><code>onmessage</code></td><td>Parse JSON, cập nhật signal values trên Dashboard</td></tr>
-            <tr><td><code>onclose</code></td><td>Show "Reconnecting…", sau 2–5s gọi <code>new WebSocket(...)</code></td></tr>
-            <tr><td><code>onerror</code></td><td>Log lỗi, trigger reconnect</td></tr>
+            <tr><td><code>onopen</code></td><td>Call <code>GET /signals</code> to fetch initial snapshot, update UI badge to "Connected"</td></tr>
+            <tr><td><code>onmessage</code></td><td>Parse JSON, update signal values on the Dashboard</td></tr>
+            <tr><td><code>onclose</code></td><td>Show "Reconnecting…", call <code>new WebSocket(...)</code> after 2–5 s</td></tr>
+            <tr><td><code>onerror</code></td><td>Log error, trigger reconnect</td></tr>
           </tbody>
         </table>
       </div>
@@ -399,7 +399,7 @@
     <!-- SERVER → CLIENT -->
     <section id="msg-server">
       <h2>Server → Client Messages</h2>
-      <p>BE push một JSON frame mỗi interval. Chỉ các signals thay đổi được gửi (delta) hoặc tất cả signals (full), tùy implementation.</p>
+      <p>The backend pushes one JSON frame per interval. Only changed signals (delta) or all signals (full) are sent — depends on implementation.</p>
 
       <h3>Signal Update Frame</h3>
       <div class="code-block">{
@@ -417,12 +417,12 @@
 
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Field</th><th>Type</th><th>Mô tả</th></tr></thead>
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>timestamp</code></td><td>string (ISO 8601)</td><td>Thời điểm frame được tạo, UTC</td></tr>
-            <tr><td><code>signals[]</code></td><td>array</td><td>Danh sách signal updates trong frame này</td></tr>
-            <tr><td><code>signals[].name</code></td><td>string</td><td>Tên signal - khớp với <code>GET /signals/available</code></td></tr>
-            <tr><td><code>signals[].value</code></td><td>number</td><td>Giá trị hiện tại. Enum signals: integer (index của state)</td></tr>
+            <tr><td><code>timestamp</code></td><td>string (ISO 8601)</td><td>Frame creation time, UTC</td></tr>
+            <tr><td><code>signals[]</code></td><td>array</td><td>List of signal updates in this frame</td></tr>
+            <tr><td><code>signals[].name</code></td><td>string</td><td>Signal name — matches <code>GET /signals/available</code></td></tr>
+            <tr><td><code>signals[].value</code></td><td>number</td><td>Current value. Enum signals: integer (state index)</td></tr>
           </tbody>
         </table>
       </div>
@@ -431,11 +431,11 @@
     <!-- CLIENT → SERVER -->
     <section id="msg-client">
       <h2>Client → Server Messages</h2>
-      <p>Trong demo này, WS là <strong>server-push only</strong>. Để ghi signal, dùng REST <code>PUT /signals/{name}</code> hoặc <code>POST /signals/batch_update</code>.</p>
+      <p>In this demo, WS is <strong>server-push only</strong>. To write a signal, use REST <code>PUT /signals/{name}</code> or <code>POST /signals/batch_update</code>.</p>
 
       <div class="info-box">
-        <strong>Ping / Keepalive:</strong> Có thể gửi JSON <code>{"type":"ping"}</code> để giữ kết nối sống.
-        Server sẽ ignore hoặc respond <code>{"type":"pong"}</code> tùy implementation.
+        <strong>Ping / Keepalive:</strong> Optionally send JSON <code>{"type":"ping"}</code> to keep the connection alive.
+        The server will ignore or respond with <code>{"type":"pong"}</code> depending on implementation.
       </div>
       <div class="code-block"><span class="c-cmt">// Ping (optional keepalive)</span>
 ws.send(JSON.stringify({ <span class="c-key">"type"</span>: <span class="c-str">"ping"</span> }));
@@ -446,8 +446,8 @@ ws.send(JSON.stringify({ <span class="c-key">"type"</span>: <span class="c-str">
     <section id="msg-errors">
       <h2>Error Handling &amp; Reconnect</h2>
       <div class="warn-box">
-        <strong>&#9888; Browser WebSocket không có built-in reconnect.</strong>
-        FE phải tự implement exponential backoff.
+        <strong>&#9888; Browser WebSocket has no built-in reconnect.</strong>
+        The frontend must implement exponential backoff manually.
       </div>
       <div class="code-block"><span class="c-kw">function</span> <span class="c-fn">connectWS</span>(retryMs = <span class="c-num">2000</span>) {
   <span class="c-kw">const</span> ws = <span class="c-kw">new</span> <span class="c-fn">WebSocket</span>(<span class="c-str">"wss://car-hmi-api-demo.onrender.com/ws/signals"</span>);
@@ -564,7 +564,7 @@ asyncio.<span class="c-fn">run</span>(<span class="c-fn">listen_signals</span>()
     <!-- LIVE DEMO -->
     <section id="live-demo">
       <h2>Live Tester (Mock)</h2>
-      <p>Connects to <strong>MockWebSocket</strong> - data được simulate trong browser, không cần server thật.</p>
+      <p>Connects to <strong>MockWebSocket</strong> — data is simulated in the browser, no real server needed.</p>
 
       <div class="demo-card">
         <div class="demo-header">

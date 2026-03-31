@@ -60,7 +60,7 @@ window.onload = function () {
     openapi: "3.0.3",
     info: {
       title: "CAN-HMI REST API",
-      description: "REST + WebSocket contract cho Car HMI demo.\n\n**WebSocket realtime stream:** `wss://car-hmi-api-demo.onrender.com/ws/signals` - xem [WebSocket Docs](/ws).\n\n---\n\n### HTTP Status Codes\n\n| HTTP | App Code | ID | Mô tả |\n|------|----------|----|-------|\n| `200 OK` | - | - | Thành công |\n| `201 Created` | - | - | POST /api/profile tạo mới |\n| `202 Accepted` | - | - | Signal write đã queue gửi CAN |\n| `204 No Content` | - | - | DELETE thành công |\n| `400 Bad Request` | `3001` `3002` | VAL_INVALID_JSON / VAL_MISSING_FIELD | JSON sai / thiếu field |\n| `401 Unauthorized` | `4001` | SEC_UNAUTHORIZED | API Key không hợp lệ |\n| `403 Forbidden` | `4002` `4004` | SAFE_WRITE_DENIED / SAFE_VEHICLE_MOVING | Signal read-only / xe đang chạy |\n| `404 Not Found` | `3004` | VAL_NOT_FOUND | Resource không tồn tại |\n| `409 Conflict` | `3005` | VAL_CONFLICT | Tên trùng / section_id mismatch |\n| `422 Unprocessable` | `3003` | VAL_OUT_OF_RANGE | Value ngoài [min, max] |\n| `500 Server Error` | `1000` `4003` | SYS_UNKNOWN / SAFE_WATCHDOG_TRIP | Lỗi nội bộ |\n| `503 Unavailable` | `1001` `2001` | SYS_DB_LOCKED / HW_CAN_ERROR | DB locked / hardware |\n| `504 Timeout` | `2002` | HW_XCP_TIMEOUT | ECU XCP timeout |\n\nXem đầy đủ tại **[Error Codes Reference](/docs/errors)**.\n\n---\n\n### section_id (Optimistic Locking)\nMỗi PUT request phải kèm `section_id` khớp với giá trị hiện tại của server.\nNếu không khớp → **409 / VAL_CONFLICT** → client GET lại rồi retry.",,
+      description: "REST + WebSocket API contract for the Car HMI demo.\n\n**WebSocket realtime stream:** `wss://car-hmi-api-demo.onrender.com/ws/signals` — see [WebSocket Docs](/ws).\n\n---\n\n### HTTP Status Codes\n\n| HTTP | App Code | ID | Description |\n|------|----------|----|-------------|\n| `200 OK` | - | - | Success |\n| `201 Created` | - | - | Profile created (POST /api/profile) |\n| `202 Accepted` | - | - | Signal write queued for CAN |\n| `204 No Content` | - | - | DELETE successful |\n| `400 Bad Request` | `3001` `3002` | VAL_INVALID_JSON / VAL_MISSING_FIELD | Invalid JSON / missing field |\n| `401 Unauthorized` | `4001` | SEC_UNAUTHORIZED | Invalid API key |\n| `403 Forbidden` | `4002` `4004` | SAFE_WRITE_DENIED / SAFE_VEHICLE_MOVING | Signal read-only / vehicle moving |\n| `404 Not Found` | `3004` | VAL_NOT_FOUND | Resource not found |\n| `409 Conflict` | `3005` | VAL_CONFLICT | Duplicate name / section_id mismatch |\n| `422 Unprocessable` | `3003` | VAL_OUT_OF_RANGE | Value outside [min, max] |\n| `500 Server Error` | `1000` `4003` | SYS_UNKNOWN / SAFE_WATCHDOG_TRIP | Internal server error |\n| `503 Unavailable` | `1001` `2001` | SYS_DB_LOCKED / HW_CAN_ERROR | DB locked / hardware error |\n| `504 Timeout` | `2002` | HW_XCP_TIMEOUT | ECU XCP timeout |\n\nSee full reference at **[Error Codes Reference](/docs/errors)**.\n\n---\n\n### section_id (Optimistic Locking)\nEvery PUT request must include `section_id` matching the current server value.\nIf mismatched → **409 / VAL_CONFLICT** → client must GET again and retry.",,
       version: "1.0.0",
       contact: { url: "https://car-hmi-api-demo.onrender.com" }
     },
@@ -104,7 +104,7 @@ window.onload = function () {
       "/api/profiles": {
         get: {
           tags: ["Profiles"],
-          summary: "Lay danh sach tat ca profiles",
+          summary: "List all profiles",
           description: "Returns all stored user profiles.",
           operationId: "getProfiles",
           responses: {
@@ -129,11 +129,11 @@ window.onload = function () {
       "/api/profile": {
         get: {
           tags: ["Profiles"],
-          summary: "Lay profile theo ten (hoac active profile)",
+          summary: "Get profile by name (or active profile)",
           operationId: "getProfile",
           parameters: [
             { name: "name", in: "query", required: false,
-              description: "Profile name. Bo trong de lay active profile.",
+              description: "Profile name. Leave empty to get the active profile.",
               schema: { type: "string", example: "U0" } }
           ],
           responses: {
@@ -143,7 +143,7 @@ window.onload = function () {
         },
         post: {
           tags: ["Profiles"],
-          summary: "Tao moi profile",
+          summary: "Create new profile",
           operationId: "createProfile",
           requestBody: {
             required: true,
@@ -161,8 +161,8 @@ window.onload = function () {
         },
         put: {
           tags: ["Profiles"],
-          summary: "Cap nhat profile (optimistic lock)",
-          description: "Yeu cau `section_id` khop voi gia tri hien tai cua server.",
+          summary: "Update profile (optimistic lock)",
+          description: "Requires `section_id` matching the current server value.",
           operationId: "updateProfile",
           requestBody: {
             required: true,
@@ -182,7 +182,7 @@ window.onload = function () {
       "/api/profile/{name}": {
         delete: {
           tags: ["Profiles"],
-          summary: "Xoa profile",
+          summary: "Delete profile",
           operationId: "deleteProfile",
           parameters: [
             { name: "name", in: "path", required: true, schema: { type: "string" }, example: "U0" }
@@ -196,7 +196,7 @@ window.onload = function () {
       "/configs": {
         get: {
           tags: ["Config"],
-          summary: "Lay tat ca configs (Dev mode)",
+          summary: "Get full system info (Dev mode)",
           operationId: "getConfigs",
           responses: {
             "200": {
@@ -220,7 +220,7 @@ window.onload = function () {
       "/config": {
         get: {
           tags: ["Config"],
-          summary: "Lay active config (Dev mode)",
+          summary: "Get editable config (Dev mode)",
           operationId: "getConfig",
           responses: {
             "200": {
@@ -236,8 +236,8 @@ window.onload = function () {
         },
         put: {
           tags: ["Config"],
-          summary: "Cap nhat config (optimistic lock, Dev mode)",
-          description: "Yeu cau `section_id` khop voi gia tri hien tai cua server.",
+          summary: "Update editable config (optimistic lock, Dev mode)",
+          description: "Requires `section_id` matching the current server value.",
           operationId: "updateConfig",
           requestBody: {
             required: true,
@@ -257,8 +257,8 @@ window.onload = function () {
       "/signals": {
         get: {
           tags: ["Signals"],
-          summary: "Snapshot gia tri hien tai cua tat ca signals",
-          description: "One-time snapshot. Dung cho initial load; sau do dung **WebSocket** `/ws/signals` de nhan updates realtime.",
+          summary: "Current snapshot of all signal values",
+          description: "One-time snapshot. Use for initial load; then use **WebSocket** `/ws/signals` for realtime updates.",
           operationId: "getSignals",
           responses: {
             "200": {
@@ -287,8 +287,8 @@ window.onload = function () {
       "/signals/available": {
         get: {
           tags: ["Signals"],
-          summary: "Full metadata cua tat ca signals",
-          description: "Tra ve metadata day du: unit, min, max, writable flag, states enum, gia tri hien tai. Goi **mot lan** khi khoi dong app.",
+          summary: "Full metadata for all signals",
+          description: "Returns full metadata: unit, min, max, writable flag, states enum, current value. Call **once** on app startup.",
           operationId: "getSignalsAvailable",
           responses: {
             "200": {
@@ -316,8 +316,8 @@ window.onload = function () {
       "/signals/batch_update": {
         post: {
           tags: ["Signals"],
-          summary: "Ghi dong thoi nhieu writable signals (batch)",
-          description: "Bulk write - dong bo nhieu writable signals trong mot request.",
+          summary: "Write multiple writable signals simultaneously (batch)",
+          description: "Bulk write — sync multiple writable signals in a single request.",
           operationId: "batchUpdateSignals",
           requestBody: {
             required: true,
@@ -336,7 +336,7 @@ window.onload = function () {
           },
           responses: {
             "202": {
-              description: "Accepted - tất cả signals đã được queue",
+              description: "Accepted — all signals queued for CAN write",
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/BatchSignalWriteAccepted" },
@@ -344,15 +344,15 @@ window.onload = function () {
                 }
               }
             },
-            "400": { description: "Bad Request - thiếu trường `updates` hoặc sai định dạng", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
+            "400": { description: "Bad Request — missing `updates` field or invalid format", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
           }
         }
       },
       "/signals/{signal_name}": {
         put: {
           tags: ["Signals"],
-          summary: "Ghi gia tri cho mot writable signal",
-          description: "Forward toi CAN writer. Chi ap dung cho signals co `writable: true`:\n- `HB_FL_ActivationLevel` (0-7)\n- `HB_FR_ActivationLevel` (0-7)",
+          summary: "Write a value to a writable signal",
+          description: "Forwarded to CAN writer. Only applies to signals with `writable: true`.",
           operationId: "updateSignal",
           parameters: [
             { name: "signal_name", in: "path", required: true,
@@ -427,7 +427,7 @@ window.onload = function () {
           type: "object",
           required: ["section_id","profile_name"],
           properties: {
-            section_id:   { type: "integer", description: "Phai khop voi section_id hien tai cua server" },
+            section_id:   { type: "integer", description: "Must match the current server section_id" },
             profile_name: { type: "string" },
             signals:      { type: "array", items: { type: "string" } },
             selected:     { type: "boolean" }
@@ -467,7 +467,7 @@ window.onload = function () {
           type: "object",
           required: ["section_id"],
           properties: {
-            section_id:    { type: "integer", description: "Phai khop voi section_id hien tai cua server" },
+            section_id:    { type: "integer", description: "Must match the current server section_id" },
             config_name:   { type: "string" },
             sampling_rate: { type: "integer" },
             RTSP_url:      { type: "string" },

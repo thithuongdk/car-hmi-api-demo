@@ -10,21 +10,34 @@ let _SIGNALS_META = [];
 let _INFO_DATA = null;    // populated from data/info.json
 let _CONFIG_DATA = null;  // populated from data/config.json
 
-function _isTemperatureSignal(s) {
-  const unit = String(s?.unit || '').toLowerCase();
-  const name = String(s?.name || '').toLowerCase();
-  const desc = String(s?.description || '').toLowerCase();
-  return unit.includes('c') || name.includes('temp') || desc.includes('temp');
+function _randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function _effectiveRange(s) {
+function _signalRule(s) {
   const baseMin = Number.isFinite(s?.min) ? s.min : 0;
   const baseMax = Number.isFinite(s?.max) ? s.max : 100;
-  if (!_isTemperatureSignal(s)) return { min: baseMin, max: baseMax };
+  const unitRaw = String(s?.unit || '').toLowerCase();
+  const unit = unitRaw.replace(/\s+/g, '');
+  const name = String(s?.name || '').toLowerCase();
+  const desc = String(s?.description || '').toLowerCase();
 
-  const min = Math.max(baseMin, 20);
-  const max = Math.min(baseMax, 60);
-  return min <= max ? { min, max } : { min: baseMin, max: baseMax };
+  const withRange = (rMin, rMax, stepMin, stepMax) => {
+    const min = Math.max(baseMin, rMin);
+    const max = Math.min(baseMax, rMax);
+    return min <= max ? { min, max, stepMin, stepMax } : { min: baseMin, max: baseMax, stepMin: 1, stepMax: 3 };
+  };
+
+  const isTemp = unit === 'c' || unit === '°c' || unit === 'degc' || unitRaw.includes('celsius') || name.includes('temp') || desc.includes('temp');
+  if (isTemp) return withRange(20, 60, 1, 1);
+
+  const isDeg = unit === 'deg' || unitRaw.includes('degree');
+  if (isDeg) return withRange(30, 40, 1, 1);
+
+  const isMm = unit === 'mm';
+  if (isMm) return withRange(10, 100, 1, 1);
+
+  return { min: baseMin, max: baseMax, stepMin: 1, stepMax: 3 };
 }
 
 // Fallback used only if signal.json cannot be fetched (e.g. bare file:// open)
@@ -69,10 +82,8 @@ const Store = (() => {
         // enum: pick a random valid state value
         initVal = s.states[Math.floor(Math.random() * s.states.length)].value;
       } else {
-        const { min, max } = _effectiveRange(s);
-        const mid = (min + max) / 2;
-        initVal = +(mid + (Math.random() - 0.5) * (max - min) * 0.4).toFixed(2);
-        initVal = +Math.max(min, Math.min(max, initVal)).toFixed(2);
+        const { min, max } = _signalRule(s);
+        initVal = _randInt(Math.ceil(min), Math.floor(max));
       }
       vals[s.name] = { value: initVal, timestamp: Date.now() / 1000 };
     });
@@ -457,12 +468,21 @@ class MockWebSocket {
           if (Math.random() >= 0.08) return;
           nv = s.states[Math.floor(Math.random() * s.states.length)].value;
         } else {
-          // analog: random walk, step ≤ 10% of range between ticks
-          const { min, max } = _effectiveRange(s);
-          const range = max - min;
-          const maxStep = range * 0.10;
-          const drift = (Math.random() - 0.5) * 2 * maxStep;
-          nv = +Math.max(min, Math.min(max, cur + drift)).toFixed(2);
+          // analog: unit-aware random walk
+          const rule = _signalRule(s);
+          const min = rule.min;
+          const max = rule.max;
+          const curNorm = Number.isFinite(cur) ? Math.round(cur) : Math.round((min + max) / 2);
+          const range = Math.max(0, Math.floor(max - min));
+          const rawStep = _randInt(rule.stepMin, rule.stepMax);
+          const step = Math.min(rawStep, range);
+          if (step === 0) return;
+
+          let dir = Math.random() < 0.5 ? -1 : 1;
+          if (curNorm <= min) dir = 1;
+          if (curNorm >= max) dir = -1;
+
+          nv = Math.max(min, Math.min(max, curNorm + dir * step));
         }
         d2.signal_values[s.name] = { value: nv, timestamp: Date.now() / 1000 };
         updates.push({ name: s.name, value: nv });

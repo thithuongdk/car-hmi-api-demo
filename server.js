@@ -70,21 +70,34 @@ if (INFO_JSON) {
 // Deep-clone config so mutations don't touch the loaded object
 let CONFIG_DATA = CONFIG_JSON ? JSON.parse(JSON.stringify(CONFIG_JSON)) : null;
 
-function isTemperatureSignal(s) {
-  const unit = String(s?.unit || '').toLowerCase();
-  const name = String(s?.name || '').toLowerCase();
-  const desc = String(s?.description || '').toLowerCase();
-  return unit.includes('c') || name.includes('temp') || desc.includes('temp');
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function effectiveRange(s) {
+function signalRule(s) {
   const baseMin = Number.isFinite(s?.min) ? s.min : 0;
   const baseMax = Number.isFinite(s?.max) ? s.max : 100;
-  if (!isTemperatureSignal(s)) return { min: baseMin, max: baseMax };
+  const unitRaw = String(s?.unit || '').toLowerCase();
+  const unit = unitRaw.replace(/\s+/g, '');
+  const name = String(s?.name || '').toLowerCase();
+  const desc = String(s?.description || '').toLowerCase();
 
-  const min = Math.max(baseMin, 20);
-  const max = Math.min(baseMax, 60);
-  return min <= max ? { min, max } : { min: baseMin, max: baseMax };
+  const withRange = (rMin, rMax, stepMin, stepMax) => {
+    const min = Math.max(baseMin, rMin);
+    const max = Math.min(baseMax, rMax);
+    return min <= max ? { min, max, stepMin, stepMax } : { min: baseMin, max: baseMax, stepMin: 1, stepMax: 3 };
+  };
+
+  const isTemp = unit === 'c' || unit === '°c' || unit === 'degc' || unitRaw.includes('celsius') || name.includes('temp') || desc.includes('temp');
+  if (isTemp) return withRange(20, 60, 1, 1);
+
+  const isDeg = unit === 'deg' || unitRaw.includes('degree');
+  if (isDeg) return withRange(30, 40, 1, 1);
+
+  const isMm = unit === 'mm';
+  if (isMm) return withRange(10, 100, 1, 1);
+
+  return { min: baseMin, max: baseMax, stepMin: 1, stepMax: 3 };
 }
 
 // Signal values - seeded with midpoint or random enum state
@@ -94,10 +107,8 @@ SIGNALS_META.forEach(s => {
   if (s.states.length) {
     initVal = s.states[Math.floor(Math.random() * s.states.length)].value;
   } else {
-    const { min, max } = effectiveRange(s);
-    const mid = (min + max) / 2;
-    initVal = +(mid + (Math.random() - 0.5) * (max - min) * 0.4).toFixed(2);
-    initVal = +Math.max(min, Math.min(max, initVal)).toFixed(2);
+    const { min, max } = signalRule(s);
+    initVal = randInt(Math.ceil(min), Math.floor(max));
   }
   signalValues[s.name] = { value: initVal, timestamp: Date.now() / 1000 };
 });
@@ -327,11 +338,20 @@ wss.on('connection', (ws, req) => {
         if (Math.random() >= 0.08) return; // 8% chance to switch
         nv = s.states[Math.floor(Math.random() * s.states.length)].value;
       } else {
-        const { min, max } = effectiveRange(s);
-        const range = max - min;
-        const maxStep = range * 0.10;
-        const drift = (Math.random() - 0.5) * 2 * maxStep;
-        nv = +Math.max(min, Math.min(max, cur + drift)).toFixed(2);
+        const rule = signalRule(s);
+        const min = rule.min;
+        const max = rule.max;
+        const curNorm = Number.isFinite(cur) ? Math.round(cur) : Math.round((min + max) / 2);
+        const range = Math.max(0, Math.floor(max - min));
+        const rawStep = randInt(rule.stepMin, rule.stepMax);
+        const step = Math.min(rawStep, range);
+        if (step === 0) return;
+
+        let dir = Math.random() < 0.5 ? -1 : 1;
+        if (curNorm <= min) dir = 1;
+        if (curNorm >= max) dir = -1;
+
+        nv = Math.max(min, Math.min(max, curNorm + dir * step));
       }
 
       clientVals[s.name] = { value: nv, timestamp: Date.now() / 1000 };

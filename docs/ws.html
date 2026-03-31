@@ -344,9 +344,9 @@
       <div class="url-card">
         <div class="url-row">
           <span class="ws-pill">WSS</span>
-          <span class="url-text">wss://car-hmi-demo.onrender.com/ws/signals</span>
+          <span class="url-text">wss://car-hmi-api-demo.onrender.com/ws/signals</span>
         </div>
-        <div class="url-note">Production (TLS). Thay <code>car-hmi-demo.onrender.com</code> bằng domain thực của bạn.</div>
+        <div class="url-note">Production (TLS). Thay <code>car-hmi-api-demo.onrender.com</code> bằng domain thực của bạn.</div>
       </div>
 
       <div class="url-card" style="border-left-color:var(--accent)">
@@ -450,7 +450,7 @@ ws.send(JSON.stringify({ <span class="c-key">"type"</span>: <span class="c-str">
         FE phải tự implement exponential backoff.
       </div>
       <div class="code-block"><span class="c-kw">function</span> <span class="c-fn">connectWS</span>(retryMs = <span class="c-num">2000</span>) {
-  <span class="c-kw">const</span> ws = <span class="c-kw">new</span> <span class="c-fn">WebSocket</span>(<span class="c-str">"wss://car-hmi-demo.onrender.com/ws/signals"</span>);
+  <span class="c-kw">const</span> ws = <span class="c-kw">new</span> <span class="c-fn">WebSocket</span>(<span class="c-str">"wss://car-hmi-api-demo.onrender.com/ws/signals"</span>);
 
   ws.onopen = () => { retryMs = <span class="c-num">2000</span>; <span class="c-fn">console.log</span>(<span class="c-str">"WS connected"</span>); };
 
@@ -480,7 +480,7 @@ ws.send(JSON.stringify({ <span class="c-key">"type"</span>: <span class="c-str">
 <span class="c-cmt">// signals_info: [{ name, unit, min, max, writable, states, value }, ...]</span>
 
 <span class="c-cmt">// 2. Connect WebSocket</span>
-<span class="c-kw">const</span> ws = <span class="c-kw">new</span> <span class="c-fn">WebSocket</span>(<span class="c-str">"wss://car-hmi-demo.onrender.com/ws/signals"</span>);
+<span class="c-kw">const</span> ws = <span class="c-kw">new</span> <span class="c-fn">WebSocket</span>(<span class="c-str">"wss://car-hmi-api-demo.onrender.com/ws/signals"</span>);
 
 ws.onopen = () => {
   badge.<span class="c-fn">textContent</span> = <span class="c-str">"● Connected"</span>;
@@ -510,7 +510,7 @@ ws.onclose = () => { <span class="c-cmt">/* reconnect logic */</span> };
       <div id="tab-js-react" class="tab-pane">
         <div class="code-block"><span class="c-kw">import</span> { useEffect, useRef, useState } <span class="c-kw">from</span> <span class="c-str">"react"</span>;
 
-<span class="c-kw">export function</span> <span class="c-fn">useCANSignals</span>(url = <span class="c-str">"wss://car-hmi-demo.onrender.com/ws/signals"</span>) {
+<span class="c-kw">export function</span> <span class="c-fn">useCANSignals</span>(url = <span class="c-str">"wss://car-hmi-api-demo.onrender.com/ws/signals"</span>) {
   <span class="c-kw">const</span> [signals, setSignals] = <span class="c-fn">useState</span>({});
   <span class="c-kw">const</span> wsRef = <span class="c-fn">useRef</span>(<span class="c-kw">null</span>);
 
@@ -551,7 +551,7 @@ ws.onclose = () => { <span class="c-cmt">/* reconnect logic */</span> };
 <span class="c-kw">import</span> asyncio, json, websockets
 
 <span class="c-kw">async def</span> <span class="c-fn">listen_signals</span>():
-    uri = <span class="c-str">"wss://car-hmi-demo.onrender.com/ws/signals"</span>
+    uri = <span class="c-str">"wss://car-hmi-api-demo.onrender.com/ws/signals"</span>
     <span class="c-kw">async with</span> websockets.<span class="c-fn">connect</span>(uri) <span class="c-kw">as</span> ws:
         <span class="c-kw">async for</span> message <span class="c-kw">in</span> ws:
             frame = json.<span class="c-fn">loads</span>(message)

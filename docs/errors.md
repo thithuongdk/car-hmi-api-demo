@@ -161,7 +161,7 @@ C�c endpoint c?n `section_id`: `PUT /api/profile`, `PUT /config`
 ```js
 let retryDelay = 1000;
 function connect() {
-  const ws = new WebSocket("wss://car-hmi-demo.onrender.com/ws/signals");
+  const ws = new WebSocket("wss://car-hmi-api-demo.onrender.com/ws/signals");
   ws.addEventListener("open",  () => { retryDelay = 1000; });
   ws.addEventListener("close", (e) => {
     if (e.code !== 1000) {

@@ -670,21 +670,15 @@
                 },
                 {
                     "code": 2002,
-                    "id": "HW_XCP_TIMEOUT",
+                    "id": "HW_CAN_1_ERROR",
                     "http": 504,
-                    "description": "ECU not responding (XCP)"
+                    "description": "CAN1 bus communication timeout"
                 },
                 {
                     "code": 2003,
                     "id": "HW_CAM_LOST",
                     "http": 503,
                     "description": "Camera signal lost"
-                },
-                {
-                    "code": 2004,
-                    "id": "HW_GPS_NO_FIX",
-                    "http": 200,
-                    "description": "No GPS satellite fix yet"
                 }
             ],
             "30xx_validation": [

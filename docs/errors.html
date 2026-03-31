@@ -73,9 +73,8 @@
         <tr><td>1001</td><td>SYS_DB_LOCKED</td><td>503</td><td>System</td><td>SQLite database locked</td></tr>
         <tr><td>1002</td><td>SYS_MAINTENANCE</td><td>503</td><td>System</td><td>System under maintenance</td></tr>
         <tr><td>2001</td><td>HW_CAN_ERROR</td><td>503</td><td>Hardware</td><td>SocketCAN connection error</td></tr>
-        <tr><td>2002</td><td>HW_XCP_TIMEOUT</td><td>504</td><td>Hardware</td><td>ECU XCP timeout</td></tr>
+        <tr><td>2002</td><td>HW_CAN_1_ERROR</td><td>504</td><td>Hardware</td><td>CAN1 bus communication timeout</td></tr>
         <tr><td>2003</td><td>HW_CAM_LOST</td><td>503</td><td>Hardware</td><td>Camera signal lost</td></tr>
-        <tr><td>2004</td><td>HW_GPS_NO_FIX</td><td>200</td><td>Hardware</td><td>No GPS fix yet</td></tr>
         <tr><td>3001</td><td>VAL_INVALID_JSON</td><td>400</td><td>Validation</td><td>Invalid JSON</td></tr>
         <tr><td>3002</td><td>VAL_MISSING_FIELD</td><td>400</td><td>Validation</td><td>Missing required field</td></tr>
         <tr><td>3003</td><td>VAL_OUT_OF_RANGE</td><td>422</td><td>Validation</td><td>Value out of range</td></tr>
@@ -94,7 +93,7 @@
         <tr><th>HTTP</th><th>App Codes</th><th>When</th></tr>
       </thead>
       <tbody>
-        <tr><td>200</td><td>- / 2004</td><td>GET success / GPS no-fix state</td></tr>
+        <tr><td>200</td><td>-</td><td>GET success</td></tr>
         <tr><td>201</td><td>-</td><td>Profile created</td></tr>
         <tr><td>202</td><td>-</td><td>Write accepted</td></tr>
         <tr><td>204</td><td>-</td><td>Delete successful</td></tr>
@@ -106,7 +105,7 @@
         <tr><td>422</td><td>3003</td><td>Out of range</td></tr>
         <tr><td>500</td><td>1000, 4003</td><td>Internal error</td></tr>
         <tr><td>503</td><td>1001, 1002, 2001, 2003</td><td>Unavailable / hardware issue</td></tr>
-        <tr><td>504</td><td>2002</td><td>Timeout</td></tr>
+        <tr><td>504</td><td>2002</td><td>CAN1 timeout</td></tr>
       </tbody>
     </table>
 

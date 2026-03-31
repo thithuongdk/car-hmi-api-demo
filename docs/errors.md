@@ -18,9 +18,8 @@ All API errors return a consistent JSON structure:
 | `1001` | `SYS_DB_LOCKED` | 503 | System | SQLite database locked |
 | `1002` | `SYS_MAINTENANCE` | 503 | System | System under maintenance |
 | `2001` | `HW_CAN_ERROR` | 503 | Hardware | SocketCAN connection error |
-| `2002` | `HW_XCP_TIMEOUT` | 504 | Hardware | ECU not responding (XCP) |
+| `2002` | `HW_CAN_1_ERROR` | 504 | Hardware | CAN1 bus communication timeout |
 | `2003` | `HW_CAM_LOST` | 503 | Hardware | Camera signal lost |
-| `2004` | `HW_GPS_NO_FIX` | 200 | Hardware | No GPS satellite fix |
 | `3001` | `VAL_INVALID_JSON` | 400 | Validation | Invalid JSON format |
 | `3002` | `VAL_MISSING_FIELD` | 400 | Validation | Missing required field |
 | `3003` | `VAL_OUT_OF_RANGE` | 422 | Validation | Value outside allowed range |
@@ -35,7 +34,7 @@ All API errors return a consistent JSON structure:
 
 | HTTP | App Codes | Meaning |
 |------|-----------|---------|
-| 200 | - / 2004 | Success or GPS no-fix state |
+| 200 | - | Success |
 | 201 | - | Resource created |
 | 202 | - | Write accepted |
 | 204 | - | Delete successful |
@@ -47,7 +46,7 @@ All API errors return a consistent JSON structure:
 | 422 | 3003 | Value out of range |
 | 500 | 1000, 4003 | Internal error |
 | 503 | 1001, 1002, 2001, 2003 | Service unavailable / hardware issue |
-| 504 | 2002 | Timeout |
+| 504 | 2002 | CAN1 timeout |
 
 ## Optimistic Locking
 

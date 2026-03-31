@@ -1,16 +1,10 @@
 services:
   - type: web
     name: car-hmi-api-demo
-    runtime: static
-    staticPublishPath: .
-    buildCommand: ""
-    routes:
-      - type: rewrite
-        source: /docs
-        destination: /docs/index.html
-      - type: rewrite
-        source: /ws
-        destination: /docs/ws.html
-      - type: rewrite
-        source: /docs/errors
-        destination: /docs/errors.md
+    runtime: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 8000
+    healthCheckPath: /api/info

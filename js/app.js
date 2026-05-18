@@ -28,7 +28,7 @@ const API = _onRealServer ? RealAPI : MockAPI;
 document.addEventListener("DOMContentLoaded", async () => {
   App._wsBadge = document.getElementById("ws-badge");
 
-  // Load signal.json into Store (only needed for mock; skip on real server)
+  // Load can0.json into Store (only needed for mock; skip on real server)
   if (!_onRealServer) await Store.init();
 
   // Update header tag to show LIVE vs MOCK

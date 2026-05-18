@@ -38,23 +38,40 @@ function loadJSON(relPath) {
   catch (_) { return null; }
 }
 
-const SIGNAL_JSON  = loadJSON('candb/signal.json');
-const INFO_JSON    = loadJSON('data/info.json');
-const CONFIG_JSON  = loadJSON('data/config.json');
+const INFO_JSON     = loadJSON('data/info.json');
+const CONFIG_JSON   = loadJSON('data/config.json');
 const PROFILES_JSON = loadJSON('data/profiles.json'); // optional seed
 
-if (!SIGNAL_JSON) { console.error('[boot] ERROR: candb/signal.json not found.'); process.exit(1); }
+// Resolve CAN DB path from config (default: data/can0.json)
+const CAN0_PATH = CONFIG_JSON?.can_db?.path || 'data/can0.json';
+const CAN0_JSON = loadJSON(CAN0_PATH);
+if (!CAN0_JSON) { console.error(`[boot] ERROR: CAN DB not found: ${CAN0_PATH}`); process.exit(1); }
+console.log(`[boot] Loaded CAN DB: ${CAN0_PATH}`);
 
-// ── In-memory store (seeded from JSON, no persistence) ───────────────────────
-const SIGNALS_META = SIGNAL_JSON.signals.map(s => ({
-  name:        s.name,
-  unit:        s.unit        || '',
-  min:         s.min         ?? 0,
-  max:         s.max         ?? 100,
-  writable:    !!s.TX,
-  description: s.description || '',
-  states:      Array.isArray(s.states) ? s.states : [],
-}));
+// ── Parse can0.json messages → flat signal list ───────────────────────────────
+function parseCan0Signals(can0) {
+  const signals = [];
+  const seen    = new Set();
+  for (const [, msg] of Object.entries(can0.messages || {})) {
+    for (const [sigName, sig] of Object.entries(msg.signals || {})) {
+      if (seen.has(sigName)) continue;
+      seen.add(sigName);
+      signals.push({
+        name:        sigName,
+        unit:        sig.unit        || '',
+        min:         sig.minimum     ?? 0,
+        max:         sig.maximum     ?? 0,
+        writable:    !!sig.TX,
+        description: sig.description || '',
+        states:      Array.isArray(sig.states) ? sig.states : [],
+      });
+    }
+  }
+  return signals;
+}
+
+// ── In-memory store (seeded from can0.json, no persistence) ──────────────────
+const SIGNALS_META = parseCan0Signals(CAN0_JSON);
 
 // Redact sensitive server fields from info
 let INFO_DATA = null;

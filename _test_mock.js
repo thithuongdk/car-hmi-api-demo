@@ -13,7 +13,7 @@ global.localStorage = {
 };
 global.fetch = async (url) => {
   const map = {
-    'candb/signal.json': 'candb/signal.json',
+    'data/can0.json':    'data/can0.json',
     'data/info.json':    'data/info.json',
     'data/config.json':  'data/config.json',
   };
@@ -54,7 +54,7 @@ function ok(label, val) {
   console.log('\n=== Store.init ===');
   await Store.init();
   const d = Store.get();
-  ok('signals loaded',              d.signals_meta.length === 149);
+  ok('signals loaded',              d.signals_meta.length === 167);
   ok('profiles loaded from info',   d.profiles.length >= 4);
   ok('active profile set',          d.profiles.some(p => p.selected));
   ok('section_id present',          typeof d.section_id === 'number');

@@ -1,5 +1,8 @@
 {
     "section_id": 123,
+    "can_db": {
+        "path": "data/can0.json"
+    },
     "hardware": {
         "can_bus": {
             "can0": {

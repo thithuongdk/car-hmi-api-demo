@@ -5,10 +5,35 @@
  */
 
 // ── Default data ──────────────────────────────────────────────────────────────
-// Populated asynchronously by Store.init() from candb/signal.json
+// Populated asynchronously by Store.init() from data/can0.json (path in config.json)
 let _SIGNALS_META = [];
 let _INFO_DATA = null;    // populated from data/info.json
 let _CONFIG_DATA = null;  // populated from data/config.json
+
+/**
+ * Flatten can0.json messages → array of signal meta objects.
+ * Matches the internal signal meta shape used by Store and MockAPI.
+ */
+function _parseCan0Signals(can0) {
+  const signals = [];
+  const seen    = new Set();
+  for (const [, msg] of Object.entries(can0.messages || {})) {
+    for (const [sigName, sig] of Object.entries(msg.signals || {})) {
+      if (seen.has(sigName)) continue;
+      seen.add(sigName);
+      signals.push({
+        name:        sigName,
+        unit:        sig.unit        || '',
+        min:         sig.minimum     ?? 0,
+        max:         sig.maximum     ?? 0,
+        writable:    !!sig.TX,
+        description: sig.description || '',
+        states:      Array.isArray(sig.states) ? sig.states : [],
+      });
+    }
+  }
+  return signals;
+}
 
 function _randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -40,7 +65,7 @@ function _signalRule(s) {
   return { min: baseMin, max: baseMax, stepMin: 1, stepMax: 3 };
 }
 
-// Fallback used only if signal.json cannot be fetched (e.g. bare file:// open)
+// Fallback used only if can0.json cannot be fetched (e.g. bare file:// open)
 const _FALLBACK_SIGNALS_META = [
   { name: "EngineSpeed",  unit: "rpm", min: 0, max: 8000, writable: false, description: "Engine speed", states: [] },
   { name: "CoolantTemp",  unit: "°C",  min: 0, max: 120,  writable: false, description: "Coolant temperature", states: [] },
@@ -109,23 +134,26 @@ const Store = (() => {
   function save()   { _save(); }
   function reset()  { localStorage.removeItem(SK); _data = null; }
 
-  /** Fetch signal.json and populate _SIGNALS_META. Must be awaited before first get(). */
+  /** Fetch can0.json (path from config.json) and populate _SIGNALS_META. Must be awaited before first get(). */
   async function init() {
+    // Load config first to resolve the CAN DB path
+    let can0Path = 'data/can0.json';
     try {
-      const resp = await fetch('candb/signal.json');
+      const cr = await fetch('data/config.json');
+      if (cr.ok) {
+        _CONFIG_DATA = await cr.json();
+        can0Path = _CONFIG_DATA?.can_db?.path || can0Path;
+      }
+    } catch (_) { /* silent */ }
+
+    // Load CAN DB signals
+    try {
+      const resp = await fetch(can0Path);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const json = await resp.json();
-      _SIGNALS_META = json.signals.map(s => ({
-        name:        s.name,
-        unit:        s.unit        || '',
-        min:         s.min         ?? 0,
-        max:         s.max         ?? 100,
-        writable:    !!s.TX,
-        description: s.description || '',
-        states:      Array.isArray(s.states) ? s.states : [],
-      }));
+      _SIGNALS_META = _parseCan0Signals(json);
     } catch (e) {
-      console.warn('[Store.init] Could not load signal.json, using fallback signals.', e);
+      console.warn('[Store.init] Could not load CAN DB from', can0Path, '- using fallback signals.', e);
       _SIGNALS_META = JSON.parse(JSON.stringify(_FALLBACK_SIGNALS_META));
     }
     // Fetch project info (non-critical - app works fine without it)
@@ -137,11 +165,6 @@ const Store = (() => {
         _INFO_DATA = { ...raw, server: raw.server ? { ...raw.server, api_key: '[REDACTED]' } : raw.server };
       }
     } catch (_) { /* silent - info is optional */ }
-    // Fetch editable config (non-critical)
-    try {
-      const cr = await fetch('data/config.json');
-      if (cr.ok) _CONFIG_DATA = await cr.json();
-    } catch (_) { /* silent */ }
 
     // If localStorage has stale data (different signal count), reset it
     const saved = _load();

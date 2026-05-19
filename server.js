@@ -301,6 +301,7 @@ app.put('/signals/:name', (req, res) => {
   if (isNaN(v) || v < meta.min || v > meta.max)
     return err(res, 3003, 'VAL_OUT_OF_RANGE', `Value ${value} out of range [${meta.min}, ${meta.max}]`, 422);
   signalValues[name] = { value: v, timestamp: Date.now() / 1000 };
+  broadcastWrite([{ name, value: v }]); // push to all subscribed WS clients
   res.status(202).json({ signal_name: name, value: v, queued_at: Date.now() / 1000 });
 });
 
@@ -318,6 +319,8 @@ app.post('/signals/batch_update', (req, res) => {
     signalValues[name] = { value: v, timestamp: Date.now() / 1000 };
     results.push({ name, value: v, status: 'ok' });
   }
+  // push all successful writes to subscribed WS clients
+  broadcastWrite(results.filter(r => r.status === 'ok').map(r => ({ name: r.name, value: r.value })));
   res.status(202).json({ timestamp: new Date().toISOString(), results });
 });
 
@@ -331,28 +334,81 @@ app.get('*', (req, res) => res.sendFile(path.join(ROOT, 'index.html')));
 const server = http.createServer(app);
 const wss    = new WebSocketServer({ server, path: '/ws/signals' });
 
-// Per-client state so different clients can have different active profiles in future
+// Registry: Map<WebSocket, () => Set<string>|null>
+// Allows REST routes to broadcast writes to subscribed WS clients.
+const wsClients = new Map();
+
+/**
+ * Push a list of { name, value } updates to every connected WS client
+ * that has subscribed to each signal. Called after REST writes so that
+ * TabB receives a TX value written by TabA immediately.
+ */
+function broadcastWrite(updates) {
+  if (!updates.length) return;
+  const ts = new Date().toISOString();
+  wss.clients.forEach(ws => {
+    if (ws.readyState !== ws.OPEN) return;
+    const getSubscribed = wsClients.get(ws);
+    if (!getSubscribed) return;
+    const sub = getSubscribed(); // null = all
+    const filtered = updates.filter(u => sub === null || sub.has(u.name));
+    if (filtered.length)
+      ws.send(JSON.stringify({ timestamp: ts, signals: filtered }));
+  });
+}
+
+// Per-client subscription state + streaming
+// Protocol (client → server):
+//   { type: "subscribe",   signals: ["Sig1","Sig2"] | "*" }
+//   { type: "unsubscribe", signals: ["Sig1"] }
+//   { type: "ping" }
+// Protocol (server → client):
+//   { type: "subscribed", signals: [...] | "*", count: N }  — ack + snapshot follows
+//   { timestamp, signals: [{name,value},...] }               — periodic stream
+//   { type: "pong" }
 wss.on('connection', (ws, req) => {
   console.log('[ws] client connected from', req.socket.remoteAddress);
 
-  // snapshot of signal values at connect time (copy, not reference)
+  // null = stream ALL non-writable signals; Set<string> = only named signals
+  let subscribed = null;
+  wsClients.set(ws, () => subscribed); // register for broadcastWrite
+
+  // per-client drifting values
   const clientVals = Object.fromEntries(
     Object.entries(signalValues).map(([k, v]) => [k, { ...v }])
   );
 
-  const intervalMs = 500; // 2 Hz for demo (matches mock.js ~500ms)
+  // ── helpers ──────────────────────────────────────────────────────────────
+  function _ackSubscription() {
+    const subList = subscribed ? [...subscribed] : '*';
+    const count   = subscribed
+      ? subscribed.size
+      : SIGNALS_META.filter(s => !s.writable).length;
+    ws.send(JSON.stringify({ type: 'subscribed', signals: subList, count }));
+    // immediate value snapshot for subscribed set
+    const snap = (subscribed
+      ? SIGNALS_META.filter(s => subscribed.has(s.name))
+      : SIGNALS_META.filter(s => !s.writable)
+    ).map(s => ({ name: s.name, value: signalValues[s.name]?.value ?? 0 }));
+    if (snap.length)
+      ws.send(JSON.stringify({ timestamp: new Date().toISOString(), signals: snap }));
+  }
+
+  // ── periodic stream ───────────────────────────────────────────────────────
+  const intervalMs = 500;
   const timer = setInterval(() => {
     if (ws.readyState !== ws.OPEN) return;
     const updates = [];
 
     SIGNALS_META.forEach(s => {
-      if (s.writable) return; // HMI-controlled, no auto-drift
+      if (s.writable) return;
+      if (subscribed !== null && !subscribed.has(s.name)) return; // not subscribed
 
       const cur = clientVals[s.name]?.value ?? (s.min + s.max) / 2;
       let nv;
 
       if (s.states.length > 0) {
-        if (Math.random() >= 0.08) return; // 8% chance to switch
+        if (Math.random() >= 0.08) return;
         nv = s.states[Math.floor(Math.random() * s.states.length)].value;
       } else {
         const rule = signalRule(s);
@@ -372,32 +428,55 @@ wss.on('connection', (ws, req) => {
       }
 
       clientVals[s.name] = { value: nv, timestamp: Date.now() / 1000 };
-      // Also update the shared store so REST /signals stays in sync
-      signalValues[s.name] = clientVals[s.name];
+      // Note: intentionally NOT writing back to signalValues here.
+      // Each WS client drifts its own copy independently.
+      // signalValues is only mutated by REST PUT /signals/:name writes.
       updates.push({ name: s.name, value: nv });
     });
 
-    if (updates.length) {
+    if (updates.length)
       ws.send(JSON.stringify({ timestamp: new Date().toISOString(), signals: updates }));
-    }
   }, intervalMs);
 
-  ws.on('message', (data) => {
-    try {
-      const msg = JSON.parse(data.toString());
-      if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
-    } catch (_) {}
+  // ── incoming messages ─────────────────────────────────────────────────────
+  ws.on('message', (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw.toString()); } catch (_) { return; }
+
+    switch (msg.type) {
+      case 'ping':
+        ws.send(JSON.stringify({ type: 'pong' }));
+        break;
+
+      case 'subscribe':
+        if (!msg.signals || msg.signals === '*') {
+          subscribed = null;
+        } else if (Array.isArray(msg.signals)) {
+          subscribed = new Set(
+            msg.signals.filter(n => SIGNALS_META.some(s => s.name === n))
+          );
+        }
+        _ackSubscription();
+        console.log(`[ws] client subscribed to ${
+          subscribed ? subscribed.size + ' signals' : 'ALL signals'
+        }`);
+        break;
+
+      case 'unsubscribe':
+        if (Array.isArray(msg.signals)) {
+          if (subscribed === null) {
+            // was "all" → convert to full set minus removed
+            subscribed = new Set(SIGNALS_META.filter(s => !s.writable).map(s => s.name));
+          }
+          msg.signals.forEach(n => subscribed.delete(n));
+          _ackSubscription();
+        }
+        break;
+    }
   });
 
-  ws.on('close', () => {
-    clearInterval(timer);
-    console.log('[ws] client disconnected');
-  });
-
-  ws.on('error', (e) => {
-    clearInterval(timer);
-    console.error('[ws] error:', e.message);
-  });
+  ws.on('close', () => { clearInterval(timer); wsClients.delete(ws); console.log('[ws] client disconnected'); });
+  ws.on('error', (e) => { clearInterval(timer); wsClients.delete(ws); console.error('[ws] error:', e.message); });
 });
 
 server.listen(PORT, () => {

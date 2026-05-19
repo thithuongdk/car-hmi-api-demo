@@ -15,18 +15,37 @@ const App = {
   sectionId: 1,           // tracks latest section_id from server
 };
 
-// Auto-detect real server vs local/static mock
-const _onRealServer = (
-  typeof location !== 'undefined' &&
-  !['localhost', '127.0.0.1', ''].includes(location.hostname) &&
-  location.protocol !== 'file:'
-);
-// Unified API — RealAPI when on server, MockAPI when local
-const API = _onRealServer ? RealAPI : MockAPI;
+// Auto-detect real server vs local/static mock.
+// On Vercel (static-only deploy) server.js is NOT running → treat as mock.
+// Detection: try GET /api/signals with a short timeout; if it responds → real server.
+let _onRealServer = false;
+async function _detectServer() {
+  const isNonLocal = (
+    typeof location !== 'undefined' &&
+    !['localhost', '127.0.0.1', ''].includes(location.hostname) &&
+    location.protocol !== 'file:'
+  );
+  if (!isNonLocal) return false;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2000);
+    const res = await fetch('/api/signals', { signal: ctrl.signal });
+    clearTimeout(timer);
+    return res.ok || res.status < 500; // 200/404 means server running; timeout/network error means static
+  } catch (_) {
+    return false; // fetch failed = no real server (Vercel static or offline)
+  }
+}
+// API is resolved after _detectServer() runs in DOMContentLoaded
+let API = MockAPI; // default until detection completes
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
   App._wsBadge = document.getElementById("ws-badge");
+
+  // Detect real server (handles Vercel static vs Render full deploy)
+  _onRealServer = await _detectServer();
+  if (_onRealServer) API = RealAPI;
 
   // Load can0.json into Store (only needed for mock; skip on real server)
   if (!_onRealServer) await Store.init();
@@ -84,9 +103,22 @@ function _applyMode() {
   document.querySelectorAll(".nav-tab.dev-only").forEach(t => t.classList.toggle("dev-hidden", !isDev));
   // Rebuild dashboard with mode filter
   _renderDashboard();
+  // Re-subscribe WS: dev = all signals, user = active profile's signals only
+  _wsSubscribe(isDev ? '*' : (App.activeProfile?.signals || '*'));
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
+
+/**
+ * Send a subscribe/unsubscribe message to the active WS connection.
+ * @param {string[]|'*'} signals  Array of signal names, or '*' for all.
+ * @param {'subscribe'|'unsubscribe'} [type='subscribe']
+ */
+function _wsSubscribe(signals, type = 'subscribe') {
+  if (!App.ws || App.ws.readyState !== 1) return;
+  App.ws.send(JSON.stringify({ type, signals }));
+}
+
 function _connectWS() {
   if (App.ws) { try { App.ws.close(); } catch (_) {} }
 
@@ -106,10 +138,19 @@ function _connectWS() {
     App._wsBadge.textContent = "● WS Connected";
     App._wsBadge.className = "badge badge--ok";
     if (_onRealServer) Log.ws('CONNECTED', location.host + '/ws/signals');
+    // Subscribe to active profile signals (all in dev mode)
+    const sigs = App.mode === 'dev' ? '*' : (App.activeProfile?.signals || '*');
+    _wsSubscribe(sigs);
   };
 
   ws.onmessage = (evt) => {
     const payload = JSON.parse(evt.data);
+    if (payload.type === 'subscribed') {
+      const label = payload.signals === '*' ? 'ALL signals' : `${payload.count} signals`;
+      Log.ws('SUBSCRIBED', label);
+      return;
+    }
+    if (payload.type === 'pong') return;
     for (const sig of payload.signals) {
       App.currentValues[sig.name] = { value: sig.value, timestamp: payload.timestamp };
     }
@@ -302,6 +343,7 @@ async function _loadProfiles() {
     await API.selectProfile(sel.value);
     await _loadProfiles();
     _renderDashboard();
+    if (App.mode !== 'dev') _wsSubscribe(App.activeProfile?.signals || '*');
   });
   _renderProfilesPanel(res.profiles, res.section_id);
 }
@@ -346,6 +388,7 @@ App._selectProfile = async (name) => {
   await API.selectProfile(name);
   await _loadProfiles();
   _renderDashboard();
+  if (App.mode !== 'dev') _wsSubscribe(App.activeProfile?.signals || '*');
 };
 
 App._editProfile = async (name) => {

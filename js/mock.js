@@ -457,6 +457,8 @@ class MockWebSocket {
     this.url = url;
     this.readyState = 0; // CONNECTING
     this._intervalId = null;
+    // null = stream ALL non-writable signals; Set<string> = specific signals only
+    this._subscription = null;
     this.onopen    = null;
     this.onmessage = null;
     this.onclose   = null;
@@ -482,8 +484,11 @@ class MockWebSocket {
       const updates = [];
 
       d2.signals_meta.forEach(s => {
-        // TX=true signals are HMI-controlled - preserve whatever value was set, no auto-drift
+        // TX=true signals are HMI-controlled - no auto-drift
         if (s.writable) return;
+        // subscription filter
+        if (this._subscription !== null && !this._subscription.has(s.name)) return;
+
         const cur = d2.signal_values[s.name]?.value ?? (s.min + s.max) / 2;
         let nv;
         if (s.states.length > 0) {
@@ -519,8 +524,58 @@ class MockWebSocket {
     }, intervalMs);
   }
 
+  // ── subscription helpers ─────────────────────────────────────────────────
+  _ackSubscription() {
+    const d = Store.get();
+    const subList = this._subscription ? [...this._subscription] : '*';
+    const count   = this._subscription
+      ? this._subscription.size
+      : d.signals_meta.filter(s => !s.writable).length;
+    this.onmessage?.({ data: JSON.stringify({ type: 'subscribed', signals: subList, count }) });
+    // immediate value snapshot
+    const snap = (this._subscription
+      ? d.signals_meta.filter(s => this._subscription.has(s.name))
+      : d.signals_meta.filter(s => !s.writable)
+    ).map(s => ({ name: s.name, value: d.signal_values[s.name]?.value ?? 0 }));
+    if (snap.length)
+      this.onmessage?.({ data: JSON.stringify({ timestamp: new Date().toISOString(), signals: snap }) });
+  }
+
   send(data) {
-    Log.ws("SEND →", typeof data === "string" ? data : JSON.stringify(data));
+    let msg;
+    try { msg = typeof data === 'string' ? JSON.parse(data) : data; } catch (_) { return; }
+    Log.ws("SEND →", JSON.stringify(msg));
+
+    switch (msg.type) {
+      case 'ping':
+        this.onmessage?.({ data: JSON.stringify({ type: 'pong' }) });
+        break;
+
+      case 'subscribe': {
+        const d = Store.get();
+        if (!msg.signals || msg.signals === '*') {
+          this._subscription = null;
+        } else if (Array.isArray(msg.signals)) {
+          const valid = new Set(d.signals_meta.map(s => s.name));
+          this._subscription = new Set(msg.signals.filter(n => valid.has(n)));
+        }
+        this._ackSubscription();
+        break;
+      }
+
+      case 'unsubscribe': {
+        if (Array.isArray(msg.signals)) {
+          const d = Store.get();
+          if (this._subscription === null) {
+            // was "all" → convert to full set then remove
+            this._subscription = new Set(d.signals_meta.filter(s => !s.writable).map(s => s.name));
+          }
+          msg.signals.forEach(n => this._subscription.delete(n));
+          this._ackSubscription();
+        }
+        break;
+      }
+    }
   }
 
   close() {

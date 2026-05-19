@@ -1,144 +1,137 @@
 # CAN-HMI API Demo
 
-Frontend-only demo
-REST + WebSocket được mock bằng JavaScript + localStorage.
+REST + WebSocket API demo cho Car HMI system dựa trên CAN DB (`data/can0.json`).
+- **Mock mode** (Vercel / local file): toàn bộ backend được mock bằng JavaScript + `localStorage`, không cần server thật.
+- **Live mode** (Render): Express server thật + WebSocket thật với per-client subscription.
 
-🔗 **[Live Demo](https://car-hmi-api-demo.vercel.app)** &nbsp;|&nbsp; 📖 **[API Docs](https://car-hmi-api-demo.vercel.app/docs)**
+🔗 **[Live Demo — Render](https://car-hmi-api-demo.onrender.com)** &nbsp;|&nbsp; **[Static Demo — Vercel](https://car-hmi-api-demo.vercel.app)** &nbsp;|&nbsp; 📖 **[API Docs](https://car-hmi-api-demo.onrender.com/docs)** &nbsp;|&nbsp; **[WS Docs](https://car-hmi-api-demo.onrender.com/ws)**
 
 ## Modes
 
 | Mode | Dashboard | Profiles | Config | Signals Info |
 |---|---|---|---|---|
 | **User** | Signals theo active profile | ✅ CRUD | ❌ | ❌ |
-| **Dev** | Tất cả signals | ✅ CRUD | ✅ | ✅ |
+| **Dev** | Tất cả 167 signals | ✅ CRUD | ✅ | ✅ |
 
 ## Tabs
 
 | Tab | Nội dung |
 |---|---|
-| 📊 Dashboard | Signal cards với live mock WS updates; write controls cho writable signals |
+| 📊 Dashboard | Signal cards với live WS updates; write controls cho writable signals (TX) |
 | 👤 Profiles | CRUD profiles, select active → Dashboard filter theo profile (User mode) |
-| ⚙️ Config | (Dev mode only) Xem/sửa configs, sampling rate, RTSP/WebRTC URL, DBC files |
-| ℹ️ Signals Info | Bảng metadata đầy đủ - `GET /signals/available` |
-| 📋 API Log | Log tất cả API calls (method, URL, request/response body, status) |
+| ⚙️ Config | (Dev mode only) Xem/sửa hardware, storage, safety config |
+| ℹ️ Signals Info | Bảng metadata đầy đủ 167 signals — `GET /signals/available` |
+| 📋 API Log | Log tất cả API calls + WS events (method, URL, request/response body, status) |
 
 ## Signal Catalogue
 
+167 signals từ `data/can0.json`. Một số đại diện:
+
 | Signal | Unit | Min | Max | Writable | States |
 |---|---|---|---|---|---|
-| `EngineSpeed` | rpm | 0 | 8000 | No | - |
-| `CoolantTemp` | °C | 0 | 120 | No | - |
-| `HB_FL_ActivationLevel` | - | 0 | 7 | **Yes** | Level 1–8 (values 0–7) |
-| `HB_FR_ActivationLevel` | - | 0 | 7 | **Yes** | Level 1–8 (values 0–7) |
+| `ARS_FL_InjuryRiskAdaptive` | - | 0 | 100 | No | - |
+| `ARS_FL_TimeToFireAirbag` | - | 0 | 65535 | No | - |
+| `OMS_FL_HandsOnWheel` | - | 0 | 7 | No | 8 states |
+| `OMS_FL_OccupantWeightMean_kg` | - | 0 | 255 | No | - |
+| `OMS_FL_OccupantHeightMean_cm` | - | 0 | 255 | No | - |
+| `SMA_VehicleStable` | - | 0 | 1 | No | - |
+| `ABL_FL_RetractRequest` | - | 0 | 255 | **Yes** | - |
+| `ACR_FL_RetractRequest` | - | 0 | 255 | **Yes** | Slack Removal, Retract L1–L4, Haptic 1–6, … |
+| `ACR_FR_RetractRequest` | - | 0 | 255 | **Yes** | (same as FL) |
+| `HMI_CrashSeverity` | - | 0 | 7 | **Yes** | - |
+| `HMI_FL_OccupantAge_years` | - | 0 | 255 | **Yes** | - |
+| `Generic_SeatFunctionEnable` | - | 0 | 1 | **Yes** | - |
 
-## API endpoints được mock
+> Full list: open **Signals Info** tab in dev mode, or call `GET /signals/available`.
+
+## API Endpoints
 
 ```
-# Profiles  (User mode)
-GET    /api/profiles              - list all profiles
-GET    /api/profile?name=X        - get one profile
-POST   /api/profile               - create profile
-PUT    /api/profile               - update profile (section_id required)
-DELETE /api/profile/{name}        - delete profile → 204
+# Profiles
+GET    /api/profiles              — list all profiles
+GET    /api/profile?name=X        — get one profile
+POST   /api/profile               — create profile
+PUT    /api/profile               — update profile (section_id required)
+DELETE /api/profile/{name}        — delete profile → 204
 
-# Config  (Dev mode)
-GET    /configs                   - list all configs
-GET    /config                    - get active config
-PUT    /config                    - update config (section_id required)
+# Config
+GET    /configs                   — full system info (read-only)
+GET    /config                    — editable config snapshot
+PUT    /config                    — update config (section_id required)
 
-# Signals  (User + Dev)
-GET    /signals                   - snapshot current values
-GET    /signals/available         - full metadata (unit, min, max, writable, states)
-PUT    /signals/{signal_name}     - write single writable signal → 202
-POST   /signals/batch_update      - batch write writable signals → 202
+# Signals
+GET    /signals                   — snapshot current values
+GET    /signals/available         — full metadata (unit, min, max, writable, states)
+PUT    /signals/{signal_name}     — write single writable signal → 202 + WS broadcast
+POST   /signals/batch_update      — batch write writable signals → 202 + WS broadcast
 
 # Realtime
-WS     ws://host/ws/signals       - real-time signal stream (interval = 1000/sampling_rate ms)
+WS     /ws/signals                — real-time signal stream (500ms, per-client subscription)
 ```
+
+## WebSocket Subscription Protocol
+
+```js
+// Subscribe to specific signals (after connect)
+ws.send(JSON.stringify({ type: 'subscribe', signals: ['ARS_FL_InjuryRiskAdaptive', 'OMS_FL_HandsOnWheel'] }));
+// ← { type: 'subscribed', signals: [...], count: 2 }  + immediate snapshot
+
+// Subscribe to all signals
+ws.send(JSON.stringify({ type: 'subscribe', signals: '*' }));
+
+// Unsubscribe specific signals
+ws.send(JSON.stringify({ type: 'unsubscribe', signals: ['OMS_FL_HandsOnWheel'] }));
+
+// Keepalive
+ws.send(JSON.stringify({ type: 'ping' }));
+// ← { type: 'pong' }
+```
+
+**Cross-tab write broadcast**: khi TabA gọi `PUT /signals/ACR_FL_RetractRequest`, giá trị mới được push ngay tới tất cả WS clients đang subscribe signal đó.
+
+**App tự động subscribe** theo context:
+- Dev mode → subscribe `*` (all signals)
+- User mode → subscribe chỉ signals của active profile
+- Đổi profile → re-subscribe tự động
 
 ## section_id (Optimistic Locking)
 - Mỗi `PUT /api/profile` và `PUT /config` phải gửi `section_id` khớp với giá trị hiện tại.
 - BE sẽ tăng `section_id` sau mỗi write thành công.
 - Nếu không khớp → **409 Conflict** (xem API Log để debug).
 
-## Deploy lên Vercel
+## Deploy
+
+### Render (Real Server + WebSocket)
 
 ```bash
-# 1. Tạo repo GitHub và push project
 git init
 git add .
 git commit -m "initial: car-hmi-api-demo"
 git remote add origin https://github.com/YOUR_ORG/car-hmi-api-demo.git
 git push -u origin main
+# Rồi connect repo ở render.com → auto deploy từ render.yaml
+```
 
-# 2. Import repo trên vercel.com → Deploy
-# Hoặc dùng CLI:
+`render.yaml` đã có sẵn: `node server.js`, port `$PORT`, health check `/api/info`.
+
+### Vercel (Static Mock Only)
+
+```bash
 npm i -g vercel
 vercel --prod
 ```
 
-## DBC → signal.json (cập nhật signal catalogue)
+Trên Vercel `server.js` không chạy — app tự detect và dùng `MockWebSocket` + `localStorage`.
 
-Script `candb/dbc2signal.js` đọc một file `.dbc` và sinh lại `candb/signal.json`.
-File `signal.json` cũ được tự động backup trước khi ghi đè.
+## CAN DB
 
-### Cách dùng
+Nguồn dữ liệu: `data/can0.json` (CAN database với 167 unique signals).
+Cấu trúc: `{ messages: { MsgName: { id, size, senders, signals: { SigName: { minimum, maximum, unit, description, states, TX, RX } } } } }`
+
+## Tests
 
 ```bash
-# Cú pháp
-node candb/dbc2signal.js [input.dbc] [output.json]
-
-# Mặc định (dùng p_dummy.dbc → signal.json)
-node candb/dbc2signal.js
-
-# Chỉ định file tùy ý
-node candb/dbc2signal.js candb/my_project.dbc candb/signal.json
-```
-
-### Backup tự động
-
-Mỗi lần chạy, file `signal.json` hiện tại được copy sang:
-
-```
-candb/signal.bk_001.json   ← lần chạy đầu tiên
-candb/signal.bk_002.json   ← lần chạy thứ hai
-…
-```
-
-Nếu chưa có `signal.json` (lần đầu), không tạo backup.
-
-### Quy ước các trường được sinh tự động
-
-| Trường | Nguồn |
-|---|---|
-| `name` | `SG_` signal name |
-| `description` | `CM_ SG_` comment đầu tiên |
-| `unit` | `SG_` unit field hoặc `CM_` "Signalvalues: mm/deg/..." |
-| `min` / `max` | `SG_` range `[min\|max]` |
-| `source` | Node gửi từ `BO_` sender |
-| `destination` | Danh sách nhận từ `SG_` (bỏ `Vector__XXX`) |
-| `states` | `VAL_` enum table (nếu có) |
-| `RX` | `true` (mặc định - tất cả signal đều readable) |
-| `TX` | `false` (mặc định - sửa thủ công cho writable signals) |
-| `value` / `timestamp` | `0` (khởi tạo) |
-
-### Ví dụ output
-
-```json
-{
-  "name": "SPS_FL_SeatDirectionX",
-  "value": 0,
-  "source": ["PANTHER"],
-  "destination": ["CAR_PC", "SIMI"],
-  "timestamp": 0,
-  "description": "FL Seat x-for Direction Actuator",
-  "unit": "mm",
-  "min": 0,
-  "max": 4095,
-  "RX": true,
-  "TX": false,
-  "states": []
-}
+node _test_mock.js   # 39 tests — Store, Profiles CRUD, Config, Signals, WS subscription
 ```
 
 ---
@@ -146,31 +139,43 @@ Nếu chưa có `signal.json` (lần đầu), không tạo backup.
 ## Chạy local
 
 ```bash
+npm install
+node server.js
+# → mở http://localhost:8000
+```
+
+Hoặc không cần server (mock only):
+```bash
 # Python
 python -m http.server 8080
-# → mở http://localhost:8080
+# → mở http://localhost:8080  (chế độ mock)
 ```
 
 ## Cấu trúc
 
 ```
 car-hmi-api-demo/
-├── review.json       - review checklist
-├── index.html        - SPA shell
-├── vercel.json       - Vercel static config
-├── render.yaml       - Render static site config
+├── index.html        — SPA shell
+├── server.js         — Express server + WebSocket (Render)
+├── vercel.json       — Vercel static config (mock only)
+├── render.yaml       — Render deployment config
+├── _test_mock.js     — Integration tests (39 tests)
 ├── candb/
-│   ├── p_dummy.dbc   - nguồn DBC mẫu
-│   ├── signal.json   - signal catalogue (sinh bởi dbc2signal.js)
-│   └── dbc2signal.js - converter script
+│   ├── p_dummy.dbc   — nguồn DBC mẫu
+│   └── dbc2signal.js — DBC→JSON converter
+├── data/
+│   ├── can0.json     — CAN database (167 signals)
+│   ├── config.json   — server config
+│   └── info.json     — user profiles
 ├── css/
-│   └── style.css     - Dark theme
+│   └── style.css     — Dark theme
 ├── docs/
-│   ├── index.html    - Swagger UI (GET /docs)
-│   └── ws.html       - WebSocket docs + live tester (GET /ws)
+│   ├── index.html    — Swagger UI (GET /docs)
+│   ├── ws.html       — WebSocket docs + live tester (GET /ws)
+│   └── errors.html   — Error codes reference
 └── js/
-    ├── mock.js       - Store + MockAPI + MockWebSocket + Logger
-    └── app.js        - UI application logic
+    ├── mock.js       — Store + MockAPI + MockWebSocket + Logger
+    └── app.js        — UI application logic
 ```
 
 ## Notes cho FE team

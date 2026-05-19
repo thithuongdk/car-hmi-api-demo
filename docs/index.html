@@ -60,7 +60,7 @@ window.onload = function () {
     openapi: "3.0.3",
     info: {
       title: "CAN-HMI REST API",
-      description: "REST + WebSocket API contract for the Car HMI demo.\n\n**WebSocket realtime stream:** `wss://car-hmi-api-demo.onrender.com/ws/signals` — see [WebSocket Docs](/ws).\n\n---\n\n### HTTP Status Codes\n\n| HTTP | App Code | ID | Description |\n|------|----------|----|-------------|\n| `200 OK` | - | - | Success |\n| `201 Created` | - | - | Profile created (POST /api/profile) |\n| `202 Accepted` | - | - | Signal write queued for CAN |\n| `204 No Content` | - | - | DELETE successful |\n| `400 Bad Request` | `3001` `3002` | VAL_INVALID_JSON / VAL_MISSING_FIELD | Invalid JSON / missing field |\n| `401 Unauthorized` | `4001` | SEC_UNAUTHORIZED | Invalid API key |\n| `403 Forbidden` | `4002` `4004` | SAFE_WRITE_DENIED / SAFE_VEHICLE_MOVING | Signal read-only / vehicle moving |\n| `404 Not Found` | `3004` | VAL_NOT_FOUND | Resource not found |\n| `409 Conflict` | `3005` | VAL_CONFLICT | Duplicate name / section_id mismatch |\n| `422 Unprocessable` | `3003` | VAL_OUT_OF_RANGE | Value outside [min, max] |\n| `500 Server Error` | `1000` `4003` | SYS_UNKNOWN / SAFE_WATCHDOG_TRIP | Internal server error |\n| `503 Unavailable` | `1001` `2001` | SYS_DB_LOCKED / HW_CAN_0_ERROR | DB locked / hardware error |\n| `504 Timeout` | `2002` | HW_CAN_1_ERROR | CAN1 bus communication timeout |\n\nSee full reference at **[Error Codes Reference](/docs/errors)**.\n\n---\n\n### section_id (Optimistic Locking)\nEvery PUT request must include `section_id` matching the current server value.\nIf mismatched → **409 / VAL_CONFLICT** → client must GET again and retry.",
+      description: "REST + WebSocket API contract for the Car HMI demo.\n\n**WebSocket realtime stream:** `wss://car-hmi-api-demo.onrender.com/ws/signals` — see [WebSocket Docs](/ws).\n\n**Subscribe to signals after connect:**\n```\n{ type: 'subscribe', signals: ['ACR_FL_RetractRequest', 'OMS_FL_HandsOnWheel'] }\n← { type: 'subscribed', signals: [...], count: 2 }  + snapshot\n\n{ type: 'subscribe', signals: '*' }   // all 167 signals\n{ type: 'ping' }  →  { type: 'pong' }\n```\n\n**Cross-tab write broadcast:** REST writes (`PUT /signals/:name`, `POST /signals/batch_update`) are immediately pushed to all subscribed WS clients.\n\n---\n\n### HTTP Status Codes\n\n| HTTP | App Code | ID | Description |\n|------|----------|----|-------------|\n| `200 OK` | - | - | Success |\n| `201 Created` | - | - | Profile created (POST /api/profile) |\n| `202 Accepted` | - | - | Signal write queued for CAN |\n| `204 No Content` | - | - | DELETE successful |\n| `400 Bad Request` | `3001` `3002` | VAL_INVALID_JSON / VAL_MISSING_FIELD | Invalid JSON / missing field |\n| `401 Unauthorized` | `4001` | SEC_UNAUTHORIZED | Invalid API key |\n| `403 Forbidden` | `4002` `4004` | SAFE_WRITE_DENIED / SAFE_VEHICLE_MOVING | Signal read-only / vehicle moving |\n| `404 Not Found` | `3004` | VAL_NOT_FOUND | Resource not found |\n| `409 Conflict` | `3005` | VAL_CONFLICT | Duplicate name / section_id mismatch |\n| `422 Unprocessable` | `3003` | VAL_OUT_OF_RANGE | Value outside [min, max] |\n| `500 Server Error` | `1000` `4003` | SYS_UNKNOWN / SAFE_WATCHDOG_TRIP | Internal server error |\n| `503 Unavailable` | `1001` `2001` | SYS_DB_LOCKED / HW_CAN_0_ERROR | DB locked / hardware error |\n| `504 Timeout` | `2002` | HW_CAN_1_ERROR | CAN1 bus communication timeout |\n\nSee full reference at **[Error Codes Reference](/docs/errors)**.\n\n---\n\n### section_id (Optimistic Locking)\nEvery PUT request must include `section_id` matching the current server value.\nIf mismatched → **409 / VAL_CONFLICT** → client must GET again and retry.",
       version: "1.0.0",
       contact: { url: "https://car-hmi-api-demo.onrender.com" }
     },
@@ -116,8 +116,8 @@ window.onload = function () {
                   example: {
                     section_id: 123,
                     profiles: [
-                      { profile_name: "U0", signals: ["EngineSpeed","CoolantTemp","HB_FL_ActivationLevel"], selected: true },
-                      { profile_name: "U1", signals: ["EngineSpeed","CoolantTemp"], selected: false }
+                      { profile_name: "U0", signals: ["ARS_FL_InjuryRiskAdaptive","OMS_FL_HandsOnWheel","ACR_FL_RetractRequest"], selected: true },
+                      { profile_name: "U1", signals: ["ARS_FL_InjuryRiskAdaptive","SMA_VehicleStable"], selected: false }
                     ]
                   }
                 }
@@ -150,7 +150,7 @@ window.onload = function () {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ProfileCreate" },
-                example: { profile_name: "U2", signals: ["EngineSpeed","HB_FL_ActivationLevel"], selected: false }
+                example: { profile_name: "U2", signals: ["ARS_FL_InjuryRiskAdaptive","ACR_FL_RetractRequest"], selected: false }
               }
             }
           },
@@ -169,7 +169,7 @@ window.onload = function () {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ProfileUpdate" },
-                example: { section_id: 123, profile_name: "U0", signals: ["EngineSpeed","CoolantTemp","HB_FL_ActivationLevel"], selected: true }
+                example: { section_id: 123, profile_name: "U0", signals: ["ARS_FL_InjuryRiskAdaptive","OMS_FL_HandsOnWheel","ACR_FL_RetractRequest"], selected: true }
               }
             }
           },
@@ -269,13 +269,13 @@ window.onload = function () {
                   example: {
                     timestamp: "2024-06-01T12:00:00.123Z",
                     signals: [
-                      { name: "EngineSpeed",           value: 3000,  timestamp: 1717243200.123 },
-                      { name: "CoolantTemp",            value: 90,    timestamp: 1717243200.123 },
-                      { name: "HB_FL_ActivationLevel",  value: 2,     timestamp: 1717243200.123 },
-                      { name: "HB_FR_ActivationLevel",  value: 0,     timestamp: 1717243200.123 },
-                      { name: "BrakePressure",          value: 45.5,  timestamp: 1717243200.123 },
-                      { name: "BatteryVoltage",         value: 12.6,  timestamp: 1717243200.123 },
-                      { name: "FuelLevel",              value: 68,    timestamp: 1717243200.123 }
+                      { name: "ARS_FL_InjuryRiskAdaptive",      value: 23,   timestamp: 1717243200.123 },
+                      { name: "ARS_FL_TimeToFireAirbag",        value: 1500, timestamp: 1717243200.123 },
+                      { name: "OMS_FL_HandsOnWheel",            value: 3,    timestamp: 1717243200.123 },
+                      { name: "OMS_FL_OccupantWeightMean_kg",   value: 72,   timestamp: 1717243200.123 },
+                      { name: "ACR_FL_RetractRequest",          value: 0,    timestamp: 1717243200.123 },
+                      { name: "ACR_FR_RetractRequest",          value: 0,    timestamp: 1717243200.123 },
+                      { name: "HMI_CrashSeverity",             value: 0,    timestamp: 1717243200.123 }
                     ]
                   }
                 }
@@ -298,13 +298,13 @@ window.onload = function () {
                   schema: { $ref: "#/components/schemas/SignalsAvailableResponse" },
                   example: {
                     signals_info: [
-                      { name: "EngineSpeed",           unit: "rpm", min: 0, max: 8000, writable: false, description: "Engine speed in RPM",              states: [], value: 3000  },
-                      { name: "CoolantTemp",            unit: "C",   min: 0, max: 120,  writable: false, description: "Coolant temperature",              states: [], value: 90    },
-                      { name: "HB_FL_ActivationLevel",  unit: "",    min: 0, max: 7,    writable: true,  description: "HB Front-Left Activation Level",   states: [{value:0,description:"Level 1"},{value:1,description:"Level 2"},{value:2,description:"Level 3"},{value:3,description:"Level 4"},{value:4,description:"Level 5"},{value:5,description:"Level 6"},{value:6,description:"Level 7"},{value:7,description:"Level 8"}], value: 2 },
-                      { name: "HB_FR_ActivationLevel",  unit: "",    min: 0, max: 7,    writable: true,  description: "HB Front-Right Activation Level",  states: [{value:0,description:"Level 1"},{value:1,description:"Level 2"},{value:2,description:"Level 3"},{value:3,description:"Level 4"},{value:4,description:"Level 5"},{value:5,description:"Level 6"},{value:6,description:"Level 7"},{value:7,description:"Level 8"}], value: 0 },
-                      { name: "BrakePressure",          unit: "bar", min: 0, max: 200,  writable: false, description: "Brake line pressure",              states: [], value: 45.5 },
-                      { name: "BatteryVoltage",         unit: "V",   min: 9, max: 16,   writable: false, description: "12V battery voltage",              states: [], value: 12.6 },
-                      { name: "FuelLevel",              unit: "%",   min: 0, max: 100,  writable: false, description: "Fuel level percentage",            states: [], value: 68   }
+                      { name: "ARS_FL_InjuryRiskAdaptive",    unit: "",  min: 0, max: 100,  writable: false, description: "FL airbag injury risk adaptive",   states: [], value: 23  },
+                      { name: "OMS_FL_HandsOnWheel",          unit: "",  min: 0, max: 7,    writable: false, description: "FL occupant hands on wheel",       states: [{value:0,description:"No Hand"},{value:1,description:"One Hand"},{value:2,description:"Two Hands"},{value:3,description:"Hands Near"},{value:4,description:"Unknown"}], value: 3 },
+                      { name: "OMS_FL_OccupantWeightMean_kg", unit: "",  min: 0, max: 255,  writable: false, description: "FL occupant weight mean (kg)",      states: [], value: 72  },
+                      { name: "SMA_VehicleStable",            unit: "",  min: 0, max: 1,    writable: false, description: "Vehicle stability flag",           states: [], value: 1   },
+                      { name: "ACR_FL_RetractRequest",        unit: "",  min: 0, max: 255,  writable: true,  description: "FL ACR retract request",          states: [{value:0,description:"No Action"},{value:1,description:"Slack Removal"},{value:2,description:"Retract Level 1"},{value:3,description:"Retract Level 2"}], value: 0 },
+                      { name: "ACR_FR_RetractRequest",        unit: "",  min: 0, max: 255,  writable: true,  description: "FR ACR retract request",          states: [{value:0,description:"No Action"},{value:1,description:"Slack Removal"},{value:2,description:"Retract Level 1"},{value:3,description:"Retract Level 2"}], value: 0 },
+                      { name: "HMI_CrashSeverity",           unit: "",  min: 0, max: 7,    writable: true,  description: "HMI crash severity command",      states: [], value: 0   }
                     ]
                   }
                 }
@@ -327,8 +327,8 @@ window.onload = function () {
                 example: {
                   timestamp: "2024-06-01T12:00:00Z",
                   updates: [
-                    { name: "HB_FL_ActivationLevel", value: 3 },
-                    { name: "HB_FR_ActivationLevel", value: 5 }
+                    { name: "ACR_FL_RetractRequest", value: 2 },
+                    { name: "ACR_FR_RetractRequest", value: 2 }
                   ]
                 }
               }
@@ -340,7 +340,7 @@ window.onload = function () {
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/BatchSignalWriteAccepted" },
-                  example: { status: "queued", count: 2, results: [ { name: "HB_FL_ActivationLevel", value: 3, status: "ok" }, { name: "SomeSensor", value: 1, status: "not_writable" } ] }
+                  example: { status: "queued", count: 2, results: [ { name: "ACR_FL_RetractRequest", value: 2, status: "ok" }, { name: "ARS_FL_InjuryRiskAdaptive", value: 1, status: "not_writable" } ] }
                 }
               }
             },
@@ -356,20 +356,20 @@ window.onload = function () {
           operationId: "updateSignal",
           parameters: [
             { name: "signal_name", in: "path", required: true,
-              schema: { type: "string", enum: ["HB_FL_ActivationLevel","HB_FR_ActivationLevel"] },
-              example: "HB_FL_ActivationLevel" }
+              schema: { type: "string", enum: ["ACR_FL_RetractRequest","ACR_FR_RetractRequest","ABL_FL_RetractRequest","HMI_CrashSeverity","Generic_SeatFunctionEnable"] },
+              example: "ACR_FL_RetractRequest" }
           ],
           requestBody: {
             required: true,
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/SignalWrite" },
-                example: { timestamp: "2024-06-01T12:00:00Z", name: "HB_FL_ActivationLevel", value: 3 }
+                example: { timestamp: "2024-06-01T12:00:00Z", name: "ACR_FL_RetractRequest", value: 2 }
               }
             }
           },
           responses: {
-            "202": { description: "Accepted - signal queued for CAN write", content: { "application/json": { schema: { $ref: "#/components/schemas/SignalWriteAccepted" }, example: { signal_name: "HB_FL_ActivationLevel", value: 3, queued_at: 1717243200.123 } } } },
+            "202": { description: "Accepted - signal queued for CAN write", content: { "application/json": { schema: { $ref: "#/components/schemas/SignalWriteAccepted" }, example: { signal_name: "ACR_FL_RetractRequest", value: 2, queued_at: 1717243200.123 } } } },
             "403": { description: "Forbidden - signal is read-only (TX: false)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" }, example: { error: "Not writable" } } } },
             "404": { description: "Signal not found",             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" }, example: { error: "Not found" } } } }
           }
@@ -394,7 +394,7 @@ window.onload = function () {
           type: "object",
           properties: {
             profile_name: { type: "string",  example: "U0" },
-            signals:      { type: "array", items: { type: "string" }, example: ["EngineSpeed","CoolantTemp"] },
+            signals:      { type: "array", items: { type: "string" }, example: ["ARS_FL_InjuryRiskAdaptive","OMS_FL_HandsOnWheel"] },
             selected:     { type: "boolean", example: false }
           }
         },
@@ -403,7 +403,7 @@ window.onload = function () {
           properties: {
             section_id:   { type: "integer", example: 123 },
             profile_name: { type: "string",  example: "U0" },
-            signals:      { type: "array", items: { type: "string" }, example: ["EngineSpeed","CoolantTemp"] },
+            signals:      { type: "array", items: { type: "string" }, example: ["ARS_FL_InjuryRiskAdaptive","OMS_FL_HandsOnWheel"] },
             selected:     { type: "boolean", example: true }
           }
         },
@@ -486,7 +486,7 @@ window.onload = function () {
         SignalMeta: {
           type: "object",
           properties: {
-            name:        { type: "string",  example: "EngineSpeed" },
+            name:        { type: "string",  example: "ARS_FL_InjuryRiskAdaptive" },
             unit:        { type: "string",  example: "rpm" },
             min:         { type: "number",  example: 0 },
             max:         { type: "number",  example: 8000 },
@@ -499,7 +499,7 @@ window.onload = function () {
         SignalValue: {
           type: "object",
           properties: {
-            name:      { type: "string", example: "EngineSpeed" },
+            name:      { type: "string", example: "ARS_FL_InjuryRiskAdaptive" },
             value:     { type: "number", example: 3000 },
             timestamp: { type: "number", description: "Unix epoch seconds", example: 1717243200.123 }
           }
@@ -522,8 +522,8 @@ window.onload = function () {
           required: ["name","value"],
           properties: {
             timestamp: { type: "string", format: "date-time" },
-            name:      { type: "string", example: "HB_FL_ActivationLevel" },
-            value:     { type: "number", example: 3 }
+            name:      { type: "string", example: "ACR_FL_RetractRequest" },
+            value:     { type: "number", example: 2 }
           }
         },
         BatchSignalWrite: {
@@ -536,8 +536,8 @@ window.onload = function () {
               items: {
                 type: "object",
                 properties: {
-                  name:  { type: "string", example: "HB_FL_ActivationLevel" },
-                  value: { type: "number", example: 3 }
+                  name:  { type: "string", example: "ACR_FL_RetractRequest" },
+                  value: { type: "number", example: 2 }
                 }
               }
             }
@@ -555,8 +555,8 @@ window.onload = function () {
         SignalWriteAccepted: {
           type: "object",
           properties: {
-            signal_name: { type: "string",  example: "HB_FL_ActivationLevel" },
-            value:       { type: "number",  example: 3 },
+            signal_name: { type: "string",  example: "ACR_FL_RetractRequest" },
+            value:       { type: "number",  example: 2 },
             queued_at:   { type: "number",  description: "Unix epoch seconds", example: 1717243200.123 }
           }
         },
@@ -568,8 +568,8 @@ window.onload = function () {
             results: { type: "array", items: {
               type: "object",
               properties: {
-                name:   { type: "string", example: "HB_FL_ActivationLevel" },
-                value:  { type: "number", example: 3 },
+                name:   { type: "string", example: "ACR_FL_RetractRequest" },
+                value:  { type: "number", example: 2 },
                 status: { type: "string", enum: ["ok","not_writable","not_found","out_of_range"], example: "ok" }
               }
             }}

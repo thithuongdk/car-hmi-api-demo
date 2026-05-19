@@ -146,6 +146,47 @@ function ok(label, val) {
   ok('api_key redacted',            !info.server?.api_key || info.server.api_key === '[REDACTED]');
   console.log('   project:', info.project?.name || '(none)');
 
+  console.log('\n=== MockWebSocket subscription ===');
+  await new Promise(resolve => {
+    const ws = new MockWebSocket('ws://localhost:8000/ws/signals');
+    const received = [];
+    ws.onopen = () => {
+      // subscribe to 3 specific signals
+      const picks = d.signals_meta.filter(s => !s.writable).slice(0, 3).map(s => s.name);
+      ws.send(JSON.stringify({ type: 'subscribe', signals: picks }));
+
+      // let one streaming tick happen
+      setTimeout(() => {
+        ws.close();
+        // check subscribed ack came through
+        ok('subscribed ack received',       received.some(m => m.type === 'subscribed'));
+        const ack = received.find(m => m.type === 'subscribed');
+        ok('subscribed.signals is array',   Array.isArray(ack?.signals));
+        ok('subscribed.count is 3',         ack?.count === 3);
+        // snapshot frame delivered
+        ok('snapshot frame received',       received.some(m => Array.isArray(m.signals)));
+        // only subscribed signals in stream frames
+        const streamSigs = received.filter(m => !m.type && Array.isArray(m.signals)).flatMap(m => m.signals.map(s => s.name));
+        const outsider = streamSigs.find(n => !picks.includes(n));
+        ok('no non-subscribed signals streamed', !outsider);
+        // pong test
+        const ws2 = new MockWebSocket('ws://localhost:8000/ws/signals');
+        const pongs = [];
+        ws2.onopen = () => ws2.send(JSON.stringify({ type: 'ping' }));
+        ws2.onmessage = (e) => {
+          const m = JSON.parse(e.data);
+          if (m.type === 'pong') pongs.push(m);
+        };
+        setTimeout(() => {
+          ok('ping → pong works',           pongs.length >= 1);
+          ws2.close();
+          resolve();
+        }, 800);
+      }, 800);
+    };
+    ws.onmessage = (e) => { try { received.push(JSON.parse(e.data)); } catch(_) {} };
+  });
+
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n${'─'.repeat(40)}`);
   if (failed === 0) {

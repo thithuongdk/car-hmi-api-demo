@@ -772,3 +772,59 @@ function _flatKeys(obj, prefix) {
 function _escHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+// ── Restraints ────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("btn-rst-match");
+  if (!btn) return;
+  btn.addEventListener("click", _doRestraintsMatch);
+});
+
+async function _doRestraintsMatch() {
+  const seat      = document.getElementById("rst-seat").value;
+  const seat_belt = document.querySelector("input[name='rst-belt']:checked")?.value;
+  const crash_pulse = document.querySelector("input[name='rst-pulse']:checked")?.value || "OLC18";
+
+  const result = document.getElementById("rst-result");
+  result.innerHTML = `<p style="color:var(--muted);font-size:12px">Matching…</p>`;
+
+  try {
+    const res = await API.matchRestraints({ seat, seat_belt, crash_pulse });
+    _renderRestraintsResult(result, res, { seat, seat_belt, crash_pulse });
+  } catch (e) {
+    result.innerHTML = `<p style="color:var(--crit);font-size:12px">Error: ${_escHtml(e.message)}</p>`;
+  }
+}
+
+function _renderRestraintsResult(container, res, params) {
+  const scoreColor = res.score >= 4 ? 'var(--crit)' : res.score >= 2.5 ? 'var(--warn)' : 'var(--ok)';
+  container.innerHTML = `
+    <div class="rst-result-card">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span class="badge ${res.matched ? 'badge--ok' : 'badge--dis'}" style="font-size:12px">
+          ${res.matched ? '✓ Matched' : '✗ No match'}
+        </span>
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <span style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em">Score</span>
+          <span class="rst-score" style="color:${scoreColor}">${res.score.toFixed(1)}</span>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">VIDEO FILE</div>
+        <div class="rst-filename">${_escHtml(res.video.filename)}</div>
+        <a href="${_escHtml(res.video.url)}" class="btn btn-sm" style="margin-top:6px;display:inline-block" target="_blank">
+          ▶ Open URL
+        </a>
+      </div>
+
+      <div class="rst-meta-grid">
+        <span class="k">Seat</span>        <span class="v">${_escHtml(params.seat)}</span>
+        <span class="k">Seat belt</span>   <span class="v">${_escHtml(res.video.seat_belt)}</span>
+        <span class="k">Crash pulse</span> <span class="v">${_escHtml(params.crash_pulse)}</span>
+        <span class="k">Percentile</span>  <span class="v">${res.video.percentile}th</span>
+        <span class="k">Seat position</span><span class="v">${res.video.seat_position}</span>
+        <span class="k">Weight</span>      <span class="v">${res.video.weight} kg</span>
+      </div>
+    </div>`;
+}

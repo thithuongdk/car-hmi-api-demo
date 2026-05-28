@@ -46,6 +46,7 @@
   <button class="nav-tab dev-only" data-tab="config">⚙️ Config</button>
   <button class="nav-tab dev-only" data-tab="signals-info">ℹ️ Signals Info</button>
   <button class="nav-tab dev-only" data-tab="system-info">📡 System Info</button>
+  <button class="nav-tab dev-only" data-tab="restraints">🔒 Restraints</button>
   <button class="nav-tab"        data-tab="api-log">📋 API Log</button>
 </nav>
 
@@ -105,6 +106,55 @@
         <span style="font-size:12px;color:var(--muted)">Read-only. api_key is redacted.</span>
       </div>
       <div id="info-content"><p style="color:var(--muted);padding:12px">Loading…</p></div>
+    </div>
+  </div>
+
+  <!-- RESTRAINTS (dev only) -->
+  <div class="tab-pane" id="tab-restraints">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Restraints Match &nbsp;<span class="badge badge--dev">Dev Mode</span>&nbsp;<span class="badge badge--neutral">GET /api/restraints/match</span></h2>
+      </div>
+
+      <div class="rst-layout">
+        <!-- Form -->
+        <div class="rst-form">
+          <div class="form-group">
+            <label>Seat</label>
+            <select class="sel" id="rst-seat" style="width:100%">
+              <option value="driver">Driver (FL)</option>
+              <option value="passenger">Passenger (FR)</option>
+              <option value="rear_left">Rear Left (R1)</option>
+              <option value="rear_right">Rear Right (R2)</option>
+              <option value="rear_center">Rear Center (RR1)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Seat belt</label>
+            <div class="rst-radio-group">
+              <label class="rst-radio"><input type="radio" name="rst-belt" value="CLL" /> CLL</label>
+              <label class="rst-radio"><input type="radio" name="rst-belt" value="SLL" checked /> SLL</label>
+              <label class="rst-radio"><input type="radio" name="rst-belt" value="MSLL" /> MSLL</label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Crash pulse</label>
+            <div class="rst-radio-group">
+              <label class="rst-radio"><input type="radio" name="rst-pulse" value="OLC18" checked /> OLC 18</label>
+              <label class="rst-radio"><input type="radio" name="rst-pulse" value="OLC30" /> OLC 30</label>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" id="btn-rst-match" style="width:100%;margin-top:4px">Match</button>
+        </div>
+
+        <!-- Result -->
+        <div id="rst-result" class="rst-result-area">
+          <p style="color:var(--muted);font-size:12px">Select parameters and click Match.</p>
+        </div>
+      </div>
     </div>
   </div>
 

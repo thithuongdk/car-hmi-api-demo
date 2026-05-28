@@ -228,3 +228,50 @@ select.sel {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--surface); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── Restraints tab ──────────────────────────────────────────────────── */
+.rst-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 600px) { .rst-layout { grid-template-columns: 1fr; } }
+
+.rst-form { display: flex; flex-direction: column; gap: 2px; }
+
+.rst-radio-group {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 6px; margin-top: 4px;
+}
+.rst-radio {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; cursor: pointer; user-select: none;
+}
+.rst-radio input[type=radio] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+
+.rst-result-area {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; min-height: 140px;
+}
+.rst-result-card { display: flex; flex-direction: column; gap: 10px; }
+.rst-result-card .rst-matched {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600;
+}
+.rst-meta-grid {
+  display: grid; grid-template-columns: 130px 1fr;
+  gap: 4px 12px; font-size: 12px;
+}
+.rst-meta-grid .k { color: var(--muted); }
+.rst-meta-grid .v { color: var(--text); font-family: monospace; }
+.rst-score {
+  font-size: 28px; font-weight: 700;
+  color: var(--accent);
+}
+.rst-filename {
+  font-family: monospace; font-size: 12px;
+  background: var(--bg); border: 1px solid var(--border);
+  padding: 4px 10px; border-radius: 4px; word-break: break-all;
+}

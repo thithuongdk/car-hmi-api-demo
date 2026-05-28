@@ -72,7 +72,8 @@ window.onload = function () {
       { name: "System",   description: "Project info and system metadata (read-only)" },
       { name: "Profiles", description: "User profile management - which signals to show per user" },
       { name: "Config",   description: "System configuration: sampling rate, RTSP/WebRTC URLs. Dev mode only." },
-      { name: "Signals",  description: "Read CAN signal values and write writable signals" }
+      { name: "Signals",     description: "Read CAN signal values and write writable signals" },
+      { name: "Restraints",  description: "Restraint system video matching based on live occupant data (weight, seat position) and crash pulse" }
     ],
     paths: {
       "/api/info": {
@@ -374,6 +375,49 @@ window.onload = function () {
             "404": { description: "Signal not found",             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" }, example: { error: "Not found" } } } }
           }
         }
+      },
+      "/api/restraints/match": {
+        get: {
+          tags: ["Restraints"],
+          summary: "Match restraint video for a seat",
+          description: "Returns the best-matching video file based on live occupant signals and the specified crash pulse.\n\n**Seat → signal suffix mapping:**\n\n| seat | suffix | Signals used |\n|------|--------|-------------|\n| driver | FL | OMS_FL_OccupantWeightMean_kg, SPS_FL_SeatDirectionX, ARS_FL_InjuryRiskAdaptive |\n| passenger | FR | OMS_FR_OccupantWeightMean_kg, SPS_FR_SeatDirectionX, ARS_FR_InjuryRiskAdaptive |\n| rear_left/right/center | R1/R2/RR1 | no OMS/SPS → defaults applied |\n\n**Percentile (from weight):** ≤ 50 kg → `5p` · 51–80 kg → `50p` · > 80 kg → `95p`\n\n**Seat position (SPS_SeatDirectionX, 0–4095 mm):** < 1365 → `fwd` · 1365–2729 → `mid` · ≥ 2730 → `bwd`\n\n**Score** = ARS injury risk (0–100) ÷ 20 → range 0.0–5.0",
+          operationId: "matchRestraints",
+          parameters: [
+            { name: "seat",        in: "query", required: true,  description: "Seat position",
+              schema: { type: "string", enum: ["driver","passenger","rear_left","rear_right","rear_center"] },
+              example: "driver" },
+            { name: "seat_belt",   in: "query", required: true,  description: "Seatbelt type",
+              schema: { type: "string", enum: ["CLL","SLL","MSLL"] },
+              example: "SLL" },
+            { name: "crash_pulse", in: "query", required: false, description: "Crash pulse scenario (default: OLC18)",
+              schema: { type: "string", enum: ["OLC18","OLC30"], default: "OLC18" },
+              example: "OLC18" }
+          ],
+          responses: {
+            "200": {
+              description: "OK",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/RestraintsMatchResponse" },
+                  example: {
+                    matched: true,
+                    video: {
+                      filename: "50p_mid_56_SLL.mp4",
+                      percentile: 50,
+                      seat_position: "mid",
+                      weight: 56,
+                      seat_belt: "SLL",
+                      url: "/api/restraints/video/50p_mid_56_SLL.mp4"
+                    },
+                    score: 2.5
+                  }
+                }
+              }
+            },
+            "400": { description: "Missing required parameter (seat or seat_belt)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" }, example: { error: "seat is required", code: 3002, id: "VAL_MISSING_FIELD" } } } },
+            "422": { description: "Invalid seat / seat_belt / crash_pulse value",   content: { "application/json": { schema: { $ref: "#/components/schemas/Error" }, example: { error: "Unknown seat_belt 'ACR'. Valid: CLL, SLL, MSLL", code: 3003, id: "VAL_OUT_OF_RANGE" } } } }
+          }
+        }
       }
     },
     components: {
@@ -573,6 +617,25 @@ window.onload = function () {
                 status: { type: "string", enum: ["ok","not_writable","not_found","out_of_range"], example: "ok" }
               }
             }}
+          }
+        },
+        RestraintsMatchResponse: {
+          type: "object",
+          properties: {
+            matched: { type: "boolean", example: true },
+            video:   { $ref: "#/components/schemas/VideoMatch" },
+            score:   { type: "number",  description: "0.0–5.0, derived from ARS injury risk (0–100 ÷ 20)", example: 2.5 }
+          }
+        },
+        VideoMatch: {
+          type: "object",
+          properties: {
+            filename:      { type: "string",  description: "Constructed as {percentile}p_{seat_position}_{weight}_{seat_belt}.mp4", example: "50p_mid_56_SLL.mp4" },
+            percentile:    { type: "integer", enum: [5, 50, 95], description: "Occupant percentile: 5th (≤50 kg), 50th (51–80 kg), 95th (>80 kg)", example: 50 },
+            seat_position: { type: "string",  enum: ["fwd","mid","bwd"], description: "Fore-aft seat position from SPS_SeatDirectionX", example: "mid" },
+            weight:        { type: "integer", description: "Occupant weight (kg) from OMS signal", example: 56 },
+            seat_belt:     { type: "string",  enum: ["CLL","SLL","MSLL"], example: "SLL" },
+            url:           { type: "string",  description: "URL path to retrieve the video file", example: "/api/restraints/video/50p_mid_56_SLL.mp4" }
           }
         },
         ConflictError: {

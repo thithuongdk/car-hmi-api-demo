@@ -324,6 +324,70 @@ app.post('/signals/batch_update', (req, res) => {
   res.status(202).json({ timestamp: new Date().toISOString(), results });
 });
 
+// ── REST: Restraints ──────────────────────────────────────────────────────────
+const SEAT_TO_SUFFIX = {
+  driver:      'FL',
+  passenger:   'FR',
+  rear_left:   'R1',
+  rear_right:  'R2',
+  rear_center: 'RR1',
+};
+const VALID_SEAT_BELTS = ['CLL', 'SLL', 'MSLL'];
+const VALID_CRASH_PULSES = ['OLC18', 'OLC30'];
+
+app.get('/api/restraints/match', (req, res) => {
+  const { seat, seat_belt, crash_pulse = 'OLC18' } = req.query;
+
+  if (!seat)      return err(res, 3002, 'VAL_MISSING_FIELD', 'seat is required', 400);
+  if (!seat_belt) return err(res, 3002, 'VAL_MISSING_FIELD', 'seat_belt is required', 400);
+
+  const suffix = SEAT_TO_SUFFIX[seat];
+  if (!suffix)
+    return err(res, 3003, 'VAL_OUT_OF_RANGE',
+      `Unknown seat '${seat}'. Valid: ${Object.keys(SEAT_TO_SUFFIX).join(', ')}`, 422);
+
+  if (!VALID_SEAT_BELTS.includes(seat_belt))
+    return err(res, 3003, 'VAL_OUT_OF_RANGE',
+      `Unknown seat_belt '${seat_belt}'. Valid: ${VALID_SEAT_BELTS.join(', ')}`, 422);
+
+  if (!VALID_CRASH_PULSES.includes(crash_pulse))
+    return err(res, 3003, 'VAL_OUT_OF_RANGE',
+      `Unknown crash_pulse '${crash_pulse}'. Valid: ${VALID_CRASH_PULSES.join(', ')}`, 422);
+
+  // Read live signal values for this seat
+  const weightSig  = signalValues[`OMS_${suffix}_OccupantWeightMean_kg`];
+  const posXSig    = signalValues[`SPS_${suffix}_SeatDirectionX`];
+  const injurySig  = signalValues[`ARS_${suffix}_InjuryRiskAdaptive`];
+
+  const weight  = weightSig  ? Math.round(weightSig.value)  : 56;   // default 50th-pct
+  const posX    = posXSig    ? posXSig.value                : 2047;  // default mid
+  const injRisk = injurySig  ? injurySig.value              : 50;
+
+  // Percentile classification from occupant weight (kg)
+  const percentile    = weight <= 50 ? 5 : weight <= 80 ? 50 : 95;
+
+  // Seat fore-aft position from SPS_SeatDirectionX (0–4095 mm range)
+  const seat_position = posX < 1365 ? 'fwd' : posX < 2730 ? 'mid' : 'bwd';
+
+  // Score 0.0–5.0 derived from ARS injury risk (0–100 → 0.0–5.0)
+  const score = parseFloat((injRisk / 20).toFixed(1));
+
+  const filename = `${percentile}p_${seat_position}_${weight}_${seat_belt}.mp4`;
+
+  res.json({
+    matched: true,
+    video: {
+      filename,
+      percentile,
+      seat_position,
+      weight,
+      seat_belt,
+      url: `/api/restraints/video/${filename}`,
+    },
+    score,
+  });
+});
+
 // Static: serve everything after API routes
 app.use(express.static(ROOT));
 

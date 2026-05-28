@@ -444,6 +444,71 @@ const MockAPI = {
     Log.api("POST", "/signals/batch_update", req, res, 202);
     return res;
   },
+
+  // ── Restraints ─────────────────────────────────────────────────────────────
+
+  /** GET /api/restraints/match?seat=&seat_belt=&crash_pulse= */
+  async matchRestraints({ seat, seat_belt, crash_pulse = 'OLC18' } = {}) {
+    await delay(30);
+    const _SEAT_TO_SUFFIX = {
+      driver: 'FL', passenger: 'FR',
+      rear_left: 'R1', rear_right: 'R2', rear_center: 'RR1',
+    };
+    const _VALID_BELTS = ['CLL', 'SLL', 'MSLL'];
+    const _VALID_PULSES = ['OLC18', 'OLC30'];
+
+    if (!seat || !seat_belt) {
+      const err = { error: 'seat and seat_belt are required', code: 3002, id: 'VAL_MISSING_FIELD' };
+      Log.api('GET', '/api/restraints/match', { seat, seat_belt, crash_pulse }, err, 400);
+      throw Object.assign(new Error(err.error), err);
+    }
+    const suffix = _SEAT_TO_SUFFIX[seat];
+    if (!suffix) {
+      const err = { error: `Unknown seat '${seat}'`, code: 3003, id: 'VAL_OUT_OF_RANGE' };
+      Log.api('GET', '/api/restraints/match', { seat, seat_belt, crash_pulse }, err, 422);
+      throw Object.assign(new Error(err.error), err);
+    }
+    if (!_VALID_BELTS.includes(seat_belt)) {
+      const err = { error: `Unknown seat_belt '${seat_belt}'`, code: 3003, id: 'VAL_OUT_OF_RANGE' };
+      Log.api('GET', '/api/restraints/match', { seat, seat_belt, crash_pulse }, err, 422);
+      throw Object.assign(new Error(err.error), err);
+    }
+    if (!_VALID_PULSES.includes(crash_pulse)) {
+      const err = { error: `Unknown crash_pulse '${crash_pulse}'`, code: 3003, id: 'VAL_OUT_OF_RANGE' };
+      Log.api('GET', '/api/restraints/match', { seat, seat_belt, crash_pulse }, err, 422);
+      throw Object.assign(new Error(err.error), err);
+    }
+
+    const d = Store.get();
+    const sv = d.signal_values;
+
+    const weightSig = sv[`OMS_${suffix}_OccupantWeightMean_kg`];
+    const posXSig   = sv[`SPS_${suffix}_SeatDirectionX`];
+    const injSig    = sv[`ARS_${suffix}_InjuryRiskAdaptive`];
+
+    const weight        = weightSig ? Math.round(weightSig.value) : 56;
+    const posX          = posXSig   ? posXSig.value               : 2047;
+    const injRisk       = injSig    ? injSig.value                : 50;
+    const percentile    = weight <= 50 ? 5 : weight <= 80 ? 50 : 95;
+    const seat_position = posX < 1365 ? 'fwd' : posX < 2730 ? 'mid' : 'bwd';
+    const score         = parseFloat((injRisk / 20).toFixed(1));
+    const filename      = `${percentile}p_${seat_position}_${weight}_${seat_belt}.mp4`;
+
+    const res = {
+      matched: true,
+      video: {
+        filename,
+        percentile,
+        seat_position,
+        weight,
+        seat_belt,
+        url: `/api/restraints/video/${filename}`,
+      },
+      score,
+    };
+    Log.api('GET', '/api/restraints/match', { seat, seat_belt, crash_pulse }, res);
+    return res;
+  },
 };
 
 // ── MockWebSocket ─────────────────────────────────────────────────────────────

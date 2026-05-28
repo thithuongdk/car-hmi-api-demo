@@ -66,5 +66,11 @@ const RealAPI = (() => {
 
     // ── Info ──────────────────────────────────────────────────────────────────
     getInfo()  { return _req('GET', '/api/info'); },
+
+    // ── Restraints ────────────────────────────────────────────────────────────
+    matchRestraints({ seat, seat_belt, crash_pulse = 'OLC18' } = {}) {
+      const params = new URLSearchParams({ seat, seat_belt, crash_pulse });
+      return _req('GET', `/api/restraints/match?${params}`);
+    },
   };
 })();

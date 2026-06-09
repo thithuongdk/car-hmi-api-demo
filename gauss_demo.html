@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Gaussian Distribution (mean=98, std=10)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      color: #eee;
+    }
+    h2 { margin-bottom: 10px; }
+    .subtitle { color: #aaa; margin-bottom: 20px; font-size: 14px; }
+    
+    .input-container {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 30px;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: flex-end;
+    }
+    
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    
+    .input-group label {
+      font-size: 12px;
+      color: #aaa;
+      text-transform: uppercase;
+      font-weight: bold;
+    }
+    
+    .input-group input {
+      padding: 8px 12px;
+      border: 1px solid #00c8ff;
+      background: #16213e;
+      color: #00c8ff;
+      border-radius: 4px;
+      font-size: 14px;
+      min-width: 100px;
+    }
+    
+    .input-group input:focus {
+      outline: none;
+      box-shadow: 0 0 8px rgba(0, 200, 255, 0.5);
+    }
+    
+    .info-box {
+      background: rgba(0, 200, 255, 0.1);
+      border-left: 3px solid #00c8ff;
+      padding: 15px;
+      margin-top: 20px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #ccc;
+      max-width: 800px;
+    }
+    
+    .info-box .label {
+      color: #aaa;
+      text-transform: uppercase;
+      font-size: 11px;
+      margin-bottom: 3px;
+      font-weight: bold;
+    }
+    
+    .info-box .value {
+      color: #00c8ff;
+      font-family: monospace;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+    
+    button {
+      padding: 8px 20px;
+      background: #00c8ff;
+      color: #1a1a2e;
+      border: none;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    button:hover {
+      background: #00e8ff;
+      box-shadow: 0 0 12px rgba(0, 200, 255, 0.6);
+    }
+    
+    button:active {
+      transform: scale(0.95);
+    }
+    
+    canvas { background: #16213e; border-radius: 12px; padding: 20px; }
+  </style>
+</head>
+<body>
+  <h2>Gaussian (Normal) Distribution</h2>
+  <div class="subtitle" id="subtitle">μ = 98 &nbsp;|&nbsp; σ = 10</div>
+  
+  <div class="input-container">
+    <div class="input-group">
+      <label for="meanInput">Mean (μ)</label>
+      <input type="number" id="meanInput" value="98" step="1">
+    </div>
+    <div class="input-group">
+      <label for="stdInput">Std Dev (σ)</label>
+      <input type="number" id="stdInput" value="10" step="0.5" min="0.1">
+    </div>
+    <button id="drawBtn">Draw Chart</button>
+  </div>
+  
+  <canvas id="gaussChart" width="800" height="400"></canvas>
+  
+  <div class="info-box">
+    <div class="label">📊 Chart Range Calculation</div>
+    <div class="value">
+      Formula: min = mean - 4σ,  max = mean + 4σ
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+      <div>
+        <div class="label">Min Value</div>
+        <div class="value" id="minValue">58</div>
+      </div>
+      <div>
+        <div class="label">Max Value</div>
+        <div class="value" id="maxValue">138</div>
+      </div>
+    </div>
+    <div style="margin-top: 10px; color: #888; font-size: 12px;">
+      📝 This range captures ~99.99% of the distribution. Adjust if needed using different sigma multiples (3σ for ~99.7%, 2σ for ~95%).
+    </div>
+  </div>
+
+  <script>
+    let chartInstance = null;
+    
+    function drawGaussianChart() {
+      const mean = parseFloat(document.getElementById('meanInput').value);
+      const std = parseFloat(document.getElementById('stdInput').value);
+      
+      // Validate inputs
+      if (isNaN(mean) || isNaN(std) || std <= 0) {
+        alert('Please enter valid values for Mean and Std Dev (Std > 0)');
+        return;
+      }
+      
+      // Update subtitle
+      document.getElementById('subtitle').innerHTML = `μ = ${mean} &nbsp;|&nbsp; σ = ${std}`;
+      
+      const data = [];
+
+      // Calculate chart range: mean ± 4σ (covers ~99.99% of distribution)
+      const min = mean - 4 * std;
+      const max = mean + 4 * std;
+      
+      // Update info display
+      document.getElementById('minValue').textContent = min.toFixed(2);
+      document.getElementById('maxValue').textContent = max.toFixed(2);
+      
+      // Generate x values from min to max
+      for (let x = min; x <= max; x += 0.5) {
+        const exponent = -0.5 * Math.pow((x - mean) / std, 2);
+        const y = (1 / (std * Math.sqrt(2 * Math.PI))) * Math.exp(exponent);
+        data.push({ x: parseFloat(x.toFixed(2)), y: parseFloat(y.toFixed(6)) });
+      }
+
+      const labels = data.map(d => d.x);
+      const values = data.map(d => d.y);
+
+      // Color gradient: blue center fading to edges
+      const ctx = document.getElementById('gaussChart').getContext('2d');
+      const gradient = ctx.createLinearGradient(0, 0, 800, 0);
+      gradient.addColorStop(0,   'rgba(0, 150, 255, 0.1)');
+      gradient.addColorStop(0.5, 'rgba(0, 200, 255, 0.6)');
+      gradient.addColorStop(1,   'rgba(0, 150, 255, 0.1)');
+
+      // Destroy existing chart if any
+      if (chartInstance) {
+        chartInstance.destroy();
+      }
+
+      chartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'P(x)',
+          data: values,
+          borderColor: '#00c8ff',
+          backgroundColor: gradient,
+          borderWidth: 2.5,
+          pointRadius: 0,
+          fill: true,
+          tension: 0.4
+        }]
+      },
+      options: {
+        responsive: false,
+        plugins: {
+          legend: { labels: { color: '#eee' } },
+          tooltip: {
+            callbacks: {
+              label: ctx => `P(${ctx.label}) = ${ctx.parsed.y.toFixed(5)}`
+            }
+          },
+          // Mark μ and ±1σ, ±2σ lines via annotation-free approach (drawn on canvas)
+        }
+      },
+      plugins: [{
+        id: 'sigmaLines',
+        afterDraw(chart) {
+          const { ctx, scales: { x, y } } = chart;
+          const sigmas = [
+            { val: mean,       label: 'μ',    color: '#ffdd57' },
+            { val: mean + std, label: '+1σ',  color: '#ff6b6b' },
+            { val: mean - std, label: '−1σ',  color: '#ff6b6b' },
+            { val: mean + 2*std, label: '+2σ', color: '#ff9f43' },
+            { val: mean - 2*std, label: '−2σ', color: '#ff9f43' },
+          ];
+          ctx.save();
+          // Lấy pixel position của các điểm cuối của axis
+          const firstPixel = x.getPixelForValue(0);
+          const lastPixel = x.getPixelForValue(labels.length - 1);
+          
+          sigmas.forEach(({ val, label, color }) => {
+            // Tính toán xPos dựa trên phạm vi dữ liệu [min, max]
+            const range = max - min;
+            const ratio = (val - min) / range;
+            const xPos = firstPixel + ratio * (lastPixel - firstPixel);
+            
+            ctx.beginPath();
+            ctx.setLineDash([5, 4]);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.5;
+            ctx.moveTo(xPos, y.top);
+            ctx.lineTo(xPos, y.bottom);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = color;
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(label, xPos, y.top - 6);
+          });
+          ctx.restore();
+        }
+      }],
+      options: {
+        responsive: false,
+        plugins: {
+          legend: { labels: { color: '#eee' } },
+          tooltip: {
+            callbacks: {
+              label: c => `P(${c.label}) = ${c.parsed.y.toFixed(5)}`
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              color: '#aaa',
+              maxTicksLimit: 17,
+              callback: v => labels[v]
+            },
+            grid: { color: 'rgba(255,255,255,0.05)' },
+            title: { display: true, text: 'x', color: '#ccc' }
+          },
+          y: {
+            ticks: { color: '#aaa' },
+            grid: { color: 'rgba(255,255,255,0.05)' },
+            title: { display: true, text: 'Probability Density', color: '#ccc' }
+          }
+        }
+      }
+      });
+    }
+    
+    // Event listeners
+    document.getElementById('drawBtn').addEventListener('click', drawGaussianChart);
+    document.getElementById('meanInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') drawGaussianChart();
+    });
+    document.getElementById('stdInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') drawGaussianChart();
+    });
+    
+    // Draw initial chart
+    drawGaussianChart();
+  </script>
+</body>
+</html>

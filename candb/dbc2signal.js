@@ -6,7 +6,7 @@
  *   node candb/dbc2signal.js [input.dbc] [output.json]
  *
  * Defaults:
- *   input  = candb/p_dummy.dbc
+ *   input  = candb/p_v3.dbc
  *   output = candb/signal.json
  *
  * The existing output file is automatically backed up as:
@@ -20,7 +20,7 @@ const path = require('path');
 
 // ── CLI args ────────────────────────────────────────────────────────────────
 const ROOT    = path.resolve(__dirname, '..');
-const dbcFile = path.resolve(process.argv[2] || path.join(__dirname, 'p_dummy.dbc'));
+const dbcFile = path.resolve(process.argv[2] || path.join(__dirname, 'p_v3.dbc'));
 const outFile = path.resolve(process.argv[3] || path.join(__dirname, 'signal.json'));
 
 if (!fs.existsSync(dbcFile)) {

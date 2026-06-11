@@ -452,7 +452,7 @@ const MockAPI = {
     await delay(30);
     const _SEAT_TO_SUFFIX = {
       driver: 'FL', passenger: 'FR',
-      rear_left: 'R1', rear_right: 'R2', rear_center: 'RR1',
+      rear_left_row1: 'RL1', rear_left_row2: 'RL2', rear_right_row1: 'RR1',
     };
     const _VALID_BELTS = ['CLL', 'SLL', 'MSLL'];
     const _VALID_PULSES = ['OLC18', 'OLC30'];

@@ -136,7 +136,7 @@ let sectionId = INFO_JSON?.section_id ?? CONFIG_JSON?.section_id ?? 1;
 function buildDefaultProfiles() {
   const allNames = SIGNALS_META.map(s => s.name);
   const flFr = allNames.filter(n => /_FL_|_FR_/.test(n));
-  const rear  = allNames.filter(n => /_R1_|_R2_|_RR1_/.test(n));
+  const rear  = allNames.filter(n => /_RL1_|_RL2_|_RR1_/.test(n));
   const writable = allNames.filter(n => SIGNALS_META.find(s => s.name === n)?.writable);
   return [
     { profile_name: 'U0', description: 'Front seat profile',        signals: flFr,     selected: true  },
@@ -328,9 +328,9 @@ app.post('/signals/batch_update', (req, res) => {
 const SEAT_TO_SUFFIX = {
   driver:      'FL',
   passenger:   'FR',
-  rear_left:   'R1',
-  rear_right:  'R2',
-  rear_center: 'RR1',
+  rear_left_row1:   'RL1',
+  rear_left_row2:  'RL2',
+  rear_right_row1: 'RR1',
 };
 const VALID_SEAT_BELTS = ['CLL', 'SLL', 'MSLL'];
 const VALID_CRASH_PULSES = ['OLC18', 'OLC30'];

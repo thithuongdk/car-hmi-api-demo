@@ -61,6 +61,7 @@ PUT    /config                    — update config (section_id required)
 
 # Signals
 GET    /signals                   — snapshot current values (includes `std_name`)
+GET    /signals/{signal_name}     — single signal: value + metadata (unit, min, max, writable, states)
 GET    /signals/available         — full metadata (unit, min, max, writable, states, std_name)
 PUT    /signals/{signal_name}     — write single writable signal → 202 + WS broadcast
 POST   /signals/batch_update      — batch write writable signals → 202 + WS broadcast

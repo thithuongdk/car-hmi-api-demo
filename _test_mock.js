@@ -118,6 +118,21 @@ function ok(label, val) {
   ok('has metadata',                typeof avail.signals_info[0]?.description !== 'undefined');
   console.log('   count:', avail.signals_info.length);
 
+  console.log('\n=== GET /signals/:name ===');
+  const firstSig = avail.signals_info[0];
+  const sigDetail = await MockAPI.getSignal(firstSig.name);
+  ok('returns name',                !!sigDetail.name);
+  ok('returns value',               typeof sigDetail.value === 'number');
+  ok('returns unit',                typeof sigDetail.unit === 'string');
+  ok('returns min/max',             typeof sigDetail.min === 'number' && typeof sigDetail.max === 'number');
+  ok('returns writable',            typeof sigDetail.writable === 'boolean');
+  ok('returns states array',        Array.isArray(sigDetail.states));
+  console.log('   signal:', sigDetail.name, '=', sigDetail.value, sigDetail.unit);
+
+  let sig404 = false;
+  try { await MockAPI.getSignal('__NOEXIST__'); } catch(_) { sig404 = true; }
+  ok('non-existent returns 404',    sig404);
+
   console.log('\n=== PUT /signals/:name ===');
   await MockAPI.updateSignal(txName, 5);
   ok('TX signal write ok',          Store.get().signal_values[txName]?.value === 5);

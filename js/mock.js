@@ -432,6 +432,32 @@ const MockAPI = {
     return res;
   },
 
+  /** GET /signals/:name — single signal current value + metadata */
+  async getSignal(name) {
+    await delay();
+    const d = Store.get();
+    const meta = _resolveSignalMeta(name);
+    if (!meta) {
+      Log.api("GET", `/signals/${name}`, null, { error: `Signal '${name}' not found` }, 404);
+      throw new Error(`Signal '${name}' not found`);
+    }
+    const sv = d.signal_values[meta.name];
+    const res = {
+      name: meta.name,
+      std_name: meta.std_name || meta.name,
+      value: sv?.value ?? 0,
+      timestamp: sv?.timestamp ?? null,
+      unit: meta.unit,
+      min: meta.min,
+      max: meta.max,
+      writable: meta.writable,
+      description: meta.description,
+      states: meta.states,
+    };
+    Log.api("GET", `/signals/${name}`, null, res);
+    return res;
+  },
+
   /** GET /signals/available - full metadata + current value */
   async getSignalsAvailable() {
     await delay();

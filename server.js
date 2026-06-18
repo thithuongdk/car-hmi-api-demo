@@ -14,6 +14,7 @@
  *   GET  /config
  *   PUT  /config
  *   GET  /signals
+ *   GET  /signals/:name
  *   GET  /signals/available
  *   PUT  /signals/:name
  *   POST /signals/batch_update
@@ -322,6 +323,26 @@ app.get('/signals/available', (req, res) => {
     return { ...s, value: sv?.value ?? null, timestamp: sv?.timestamp ?? null };
   });
   res.json({ signals_info });
+});
+
+/** GET /signals/:name — single signal current value + metadata */
+app.get('/signals/:name', (req, res) => {
+  const ref = req.params.name;
+  const meta = resolveSignalMeta(ref);
+  if (!meta) return err(res, 3004, 'VAL_NOT_FOUND', `Signal '${ref}' not found`, 404);
+  const sv = signalValues[meta.name];
+  res.json({
+    name: meta.name,
+    std_name: meta.std_name || meta.name,
+    value: sv?.value ?? 0,
+    timestamp: sv?.timestamp ?? null,
+    unit: meta.unit,
+    min: meta.min,
+    max: meta.max,
+    writable: meta.writable,
+    description: meta.description,
+    states: meta.states,
+  });
 });
 
 app.put('/signals/:name', (req, res) => {

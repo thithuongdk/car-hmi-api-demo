@@ -60,6 +60,7 @@ const RealAPI = (() => {
 
     // ── Signals ───────────────────────────────────────────────────────────────
     getSignals()                 { return _req('GET',  '/signals'); },
+    getSignal(name)              { return _req('GET',  `/signals/${encodeURIComponent(name)}`); },
     getSignalsAvailable()        { return _req('GET',  '/signals/available'); },
     updateSignal(name, value)    { return _req('PUT',  `/signals/${encodeURIComponent(name)}`, { value }); },
     batchUpdateSignals(signals)  { return _req('POST', '/signals/batch_update', { signals }); },

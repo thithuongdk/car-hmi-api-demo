@@ -237,6 +237,29 @@ async function runTests() {
   const aWritable = avail.body.signals_info.find(s => s.writable);
   const aNonWritable = avail.body.signals_info.find(s => !s.writable);
 
+  // ── GET /signals/:name (existing) ─────────────────────────────────────────
+  console.log('\n━━━ GET /signals/:name (existing) ─────────────────────────────');
+  if (aWritable) {
+    const getRes = await request('GET', `/signals/${aWritable.name}`);
+    ok('200 OK',                          getRes.status === 200);
+    ok('has name',                        !!getRes.body?.name);
+    ok('has std_name',                    !!getRes.body?.std_name);
+    ok('has value',                       typeof getRes.body?.value === 'number');
+    ok('has unit',                        typeof getRes.body?.unit === 'string');
+    ok('has min',                         typeof getRes.body?.min === 'number');
+    ok('has max',                         typeof getRes.body?.max === 'number');
+    ok('has writable flag',               typeof getRes.body?.writable === 'boolean');
+    ok('has description',                 typeof getRes.body?.description === 'string');
+    ok('has states array',                Array.isArray(getRes.body?.states));
+    console.log(`   ${getRes.body.name}: ${getRes.body.value} ${getRes.body.unit} [${getRes.body.min}..${getRes.body.max}] writable=${getRes.body.writable}`);
+  }
+
+  // ── GET /signals/:name (non-existent → 404) ──────────────────────────────
+  console.log('\n━━━ GET /signals/:name (non-existent) ─────────────────────────');
+  const getMissing = await request('GET', '/signals/__NOSIGNAL__');
+  ok('404 for non-existent signal',      getMissing.status === 404);
+  ok('has error message',                !!getMissing.body?.error);
+
   // ── PUT /signals/:name (writable) ─────────────────────────────────────────
   console.log('\n━━━ PUT /signals/:name (writable) ─────────────────────────────');
   if (aWritable) {

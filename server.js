@@ -40,6 +40,7 @@ function loadJSON(relPath) {
 
 const INFO_JSON     = loadJSON('data/info.json');
 const CONFIG_JSON   = loadJSON('data/config.json');
+const SIGNAL_STD_JSON = loadJSON('data/signal_std_name.json') || {};
 const PROFILES_JSON = loadJSON('data/profiles.json'); // optional seed
 
 // Resolve CAN DB path from config (default: data/can0.json)
@@ -58,6 +59,7 @@ function parseCan0Signals(can0) {
       seen.add(sigName);
       signals.push({
         name:        sigName,
+        std_name:    SIGNAL_STD_JSON[sigName] || sigName,
         unit:        sig.unit        || '',
         min:         sig.minimum     ?? 0,
         max:         sig.maximum     ?? 0,
@@ -72,6 +74,36 @@ function parseCan0Signals(can0) {
 
 // ── In-memory store (seeded from can0.json, no persistence) ──────────────────
 const SIGNALS_META = parseCan0Signals(CAN0_JSON);
+const SIGNALS_BY_NAME = new Map(SIGNALS_META.map(s => [s.name, s]));
+const SIGNALS_BY_STD_NAME = new Map(SIGNALS_META.map(s => [s.std_name || s.name, s.name]));
+
+function resolveSignalName(ref) {
+  if (!ref) return null;
+  if (SIGNALS_BY_NAME.has(ref)) return ref;
+  return SIGNALS_BY_STD_NAME.get(ref) || null;
+}
+
+function resolveSignalMeta(ref) {
+  const name = resolveSignalName(ref);
+  return name ? SIGNALS_BY_NAME.get(name) || null : null;
+}
+
+function signalPayload(name, value, timestamp) {
+  const meta = SIGNALS_BY_NAME.get(name);
+  if (!meta) return null;
+  return {
+    name: meta.name,
+    std_name: meta.std_name || meta.name,
+    value: value ?? signalValues[name]?.value ?? 0,
+    timestamp: timestamp ?? signalValues[name]?.timestamp ?? null,
+  };
+}
+
+function normalizeSignalList(signals) {
+  if (signals === '*') return '*';
+  if (!Array.isArray(signals)) return [];
+  return [...new Set(signals.map(resolveSignalName).filter(Boolean))];
+}
 
 // Redact sensitive server fields from info
 let INFO_DATA = null;
@@ -276,7 +308,10 @@ app.put('/config', (req, res) => {
 // ── REST: Signals ─────────────────────────────────────────────────────────────
 app.get('/signals', (req, res) => {
   const sigs = Object.entries(signalValues).map(([name, sv]) => ({
-    name, value: sv.value, timestamp: sv.timestamp,
+    name,
+    std_name: SIGNALS_BY_NAME.get(name)?.std_name || name,
+    value: sv.value,
+    timestamp: sv.timestamp,
   }));
   res.json({ timestamp: new Date().toISOString(), signals: sigs });
 });
@@ -291,7 +326,7 @@ app.get('/signals/available', (req, res) => {
 
 app.put('/signals/:name', (req, res) => {
   const { name } = req.params;
-  const meta = SIGNALS_META.find(s => s.name === name);
+  const meta = resolveSignalMeta(name);
   if (!meta)          return err(res, 3004, 'VAL_NOT_FOUND',    `Signal '${name}' not found`, 404);
   if (!meta.writable) return err(res, 4002, 'SAFE_WRITE_DENIED', `Signal '${name}' is not writable`, 403);
   const value = req.body?.value;
@@ -300,9 +335,9 @@ app.put('/signals/:name', (req, res) => {
   const v = typeof value === 'number' ? value : parseFloat(value);
   if (isNaN(v) || v < meta.min || v > meta.max)
     return err(res, 3003, 'VAL_OUT_OF_RANGE', `Value ${value} out of range [${meta.min}, ${meta.max}]`, 422);
-  signalValues[name] = { value: v, timestamp: Date.now() / 1000 };
-  broadcastWrite([{ name, value: v }]); // push to all subscribed WS clients
-  res.status(202).json({ signal_name: name, value: v, queued_at: Date.now() / 1000 });
+  signalValues[meta.name] = { value: v, timestamp: Date.now() / 1000 };
+  broadcastWrite([{ name: meta.name, value: v }]); // push to all subscribed WS clients
+  res.status(202).json({ signal_name: meta.name, std_name: meta.std_name || meta.name, value: v, queued_at: Date.now() / 1000 });
 });
 
 app.post('/signals/batch_update', (req, res) => {
@@ -310,14 +345,16 @@ app.post('/signals/batch_update', (req, res) => {
   if (!Array.isArray(items) || items.length === 0)
     return err(res, 3002, 'VAL_MISSING_FIELD', 'signals array required', 400);
   const results = [];
-  for (const { name, value } of items) {
-    const meta = SIGNALS_META.find(s => s.name === name);
-    if (!meta)          { results.push({ name, value, status: 'not_found' }); continue; }
-    if (!meta.writable) { results.push({ name, value, status: 'not_writable' }); continue; }
+  for (const item of items) {
+    const ref = item?.name ?? item?.signal_name ?? item?.std_name;
+    const value = item?.value;
+    const meta = resolveSignalMeta(ref);
+    if (!meta)          { results.push({ name: ref, std_name: ref, value, status: 'not_found' }); continue; }
+    if (!meta.writable) { results.push({ name: meta.name, std_name: meta.std_name || meta.name, value, status: 'not_writable' }); continue; }
     const v = typeof value === 'number' ? value : parseFloat(value);
-    if (isNaN(v) || v < meta.min || v > meta.max) { results.push({ name, value, status: 'out_of_range' }); continue; }
-    signalValues[name] = { value: v, timestamp: Date.now() / 1000 };
-    results.push({ name, value: v, status: 'ok' });
+    if (isNaN(v) || v < meta.min || v > meta.max) { results.push({ name: meta.name, std_name: meta.std_name || meta.name, value, status: 'out_of_range' }); continue; }
+    signalValues[meta.name] = { value: v, timestamp: Date.now() / 1000 };
+    results.push({ name: meta.name, std_name: meta.std_name || meta.name, value: v, status: 'ok' });
   }
   // push all successful writes to subscribed WS clients
   broadcastWrite(results.filter(r => r.status === 'ok').map(r => ({ name: r.name, value: r.value })));
@@ -417,7 +454,7 @@ function broadcastWrite(updates) {
     const sub = getSubscribed(); // null = all
     const filtered = updates.filter(u => sub === null || sub.has(u.name));
     if (filtered.length)
-      ws.send(JSON.stringify({ timestamp: ts, signals: filtered }));
+      ws.send(JSON.stringify({ timestamp: ts, signals: filtered.map(u => signalPayload(u.name)).filter(Boolean) }));
   });
 }
 
@@ -453,7 +490,7 @@ wss.on('connection', (ws, req) => {
     const snap = (subscribed
       ? SIGNALS_META.filter(s => subscribed.has(s.name))
       : SIGNALS_META.filter(s => !s.writable)
-    ).map(s => ({ name: s.name, value: signalValues[s.name]?.value ?? 0 }));
+    ).map(s => signalPayload(s.name));
     if (snap.length)
       ws.send(JSON.stringify({ timestamp: new Date().toISOString(), signals: snap }));
   }
@@ -495,11 +532,11 @@ wss.on('connection', (ws, req) => {
       // Note: intentionally NOT writing back to signalValues here.
       // Each WS client drifts its own copy independently.
       // signalValues is only mutated by REST PUT /signals/:name writes.
-      updates.push({ name: s.name, value: nv });
+      updates.push({ name: s.name, value: nv, timestamp: Date.now() / 1000 });
     });
 
     if (updates.length)
-      ws.send(JSON.stringify({ timestamp: new Date().toISOString(), signals: updates }));
+      ws.send(JSON.stringify({ timestamp: new Date().toISOString(), signals: updates.map(u => signalPayload(u.name, u.value, u.timestamp)).filter(Boolean) }));
   }, intervalMs);
 
   // ── incoming messages ─────────────────────────────────────────────────────
@@ -516,9 +553,7 @@ wss.on('connection', (ws, req) => {
         if (!msg.signals || msg.signals === '*') {
           subscribed = null;
         } else if (Array.isArray(msg.signals)) {
-          subscribed = new Set(
-            msg.signals.filter(n => SIGNALS_META.some(s => s.name === n))
-          );
+          subscribed = new Set(normalizeSignalList(msg.signals));
         }
         _ackSubscription();
         console.log(`[ws] client subscribed to ${
@@ -532,7 +567,7 @@ wss.on('connection', (ws, req) => {
             // was "all" → convert to full set minus removed
             subscribed = new Set(SIGNALS_META.filter(s => !s.writable).map(s => s.name));
           }
-          msg.signals.forEach(n => subscribed.delete(n));
+          normalizeSignalList(msg.signals).forEach(n => subscribed.delete(n));
           _ackSubscription();
         }
         break;

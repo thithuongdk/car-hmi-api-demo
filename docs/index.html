@@ -61,7 +61,7 @@ window.onload = function () {
     openapi: "3.0.3",
     info: {
       title: "CAN-HMI REST API",
-      description: "REST + WebSocket API contract for the Car HMI demo.\n\n**WebSocket realtime stream:** `wss://car-hmi-api-demo.onrender.com/ws/signals` — see [WebSocket Docs](/ws).\n\n**Subscribe to signals after connect:**\n```\n{ type: 'subscribe', signals: ['ACR_FL_RetractRequest', 'OMS_FL_HandsOnWheel'] }\n← { type: 'subscribed', signals: [...], count: 2 }  + snapshot\n\n{ type: 'subscribe', signals: '*' }   // all 167 signals\n{ type: 'ping' }  →  { type: 'pong' }\n```\n\n**Cross-tab write broadcast:** REST writes (`PUT /signals/:name`, `POST /signals/batch_update`) are immediately pushed to all subscribed WS clients.\n\n---\n\n### HTTP Status Codes\n\n| HTTP | App Code | ID | Description |\n|------|----------|----|-------------|\n| `200 OK` | - | - | Success |\n| `201 Created` | - | - | Profile created (POST /api/profile) |\n| `202 Accepted` | - | - | Signal write queued for CAN |\n| `204 No Content` | - | - | DELETE successful |\n| `400 Bad Request` | `3001` `3002` | VAL_INVALID_JSON / VAL_MISSING_FIELD | Invalid JSON / missing field |\n| `401 Unauthorized` | `4001` | SEC_UNAUTHORIZED | Invalid API key |\n| `403 Forbidden` | `4002` `4004` | SAFE_WRITE_DENIED / SAFE_VEHICLE_MOVING | Signal read-only / vehicle moving |\n| `404 Not Found` | `3004` | VAL_NOT_FOUND | Resource not found |\n| `409 Conflict` | `3005` | VAL_CONFLICT | Duplicate name / section_id mismatch |\n| `422 Unprocessable` | `3003` | VAL_OUT_OF_RANGE | Value outside [min, max] |\n| `500 Server Error` | `1000` `4003` | SYS_UNKNOWN / SAFE_WATCHDOG_TRIP | Internal server error |\n| `503 Unavailable` | `1001` `2001` | SYS_DB_LOCKED / HW_CAN_0_ERROR | DB locked / hardware error |\n| `504 Timeout` | `2002` | HW_CAN_1_ERROR | CAN1 bus communication timeout |\n\nSee full reference at **[Error Codes Reference](/docs/errors)**.\n\n---\n\n### section_id (Optimistic Locking)\nEvery PUT request must include `section_id` matching the current server value.\nIf mismatched → **409 / VAL_CONFLICT** → client must GET again and retry.",
+      description: "REST + WebSocket API contract for the Car HMI demo.\n\n**WebSocket realtime stream:** `wss://car-hmi-api-demo.onrender.com/ws/signals` — see [WebSocket Docs](/ws).\n\n**Signal Alias (`std_name`):** Mọi REST write, batch update, và WebSocket subscribe/unsubscribe đều chấp nhận cả `name` (signal_name gốc trong CAN DB) **và** `std_name` (tên chuẩn hóa từ `data/signal_std_name.json`). Response luôn trả về cả `name` + `std_name` trong mỗi signal payload.\n\n**Subscribe to signals after connect:**\n```\n{ type: 'subscribe', signals: ['ACR_FL_RetractRequest', 'OMS_FL_HandsOnWheel'] }\n← { type: 'subscribed', signals: [...], count: 2 }  + snapshot\n\n{ type: 'subscribe', signals: '*' }   // all 167 signals\n{ type: 'subscribe', signals: ['OMS_FL_OccupantWeightMean', 'OMS_RL1_SeatbeltMisuse'] }  // bằng std_name\n{ type: 'ping' }  →  { type: 'pong' }\n```\n\n**Cross-tab write broadcast:** REST writes (`PUT /signals/:name`, `POST /signals/batch_update`) are immediately pushed to all subscribed WS clients.\n\n---\n\n### HTTP Status Codes\n\n| HTTP | App Code | ID | Description |\n|------|----------|----|-------------|\n| `200 OK` | - | - | Success |\n| `201 Created` | - | - | Profile created (POST /api/profile) |\n| `202 Accepted` | - | - | Signal write queued for CAN |\n| `204 No Content` | - | - | DELETE successful |\n| `400 Bad Request` | `3001` `3002` | VAL_INVALID_JSON / VAL_MISSING_FIELD | Invalid JSON / missing field |\n| `401 Unauthorized` | `4001` | SEC_UNAUTHORIZED | Invalid API key |\n| `403 Forbidden` | `4002` `4004` | SAFE_WRITE_DENIED / SAFE_VEHICLE_MOVING | Signal read-only / vehicle moving |\n| `404 Not Found` | `3004` | VAL_NOT_FOUND | Resource not found |\n| `409 Conflict` | `3005` | VAL_CONFLICT | Duplicate name / section_id mismatch |\n| `422 Unprocessable` | `3003` | VAL_OUT_OF_RANGE | Value outside [min, max] |\n| `500 Server Error` | `1000` `4003` | SYS_UNKNOWN / SAFE_WATCHDOG_TRIP | Internal server error |\n| `503 Unavailable` | `1001` `2001` | SYS_DB_LOCKED / HW_CAN_0_ERROR | DB locked / hardware error |\n| `504 Timeout` | `2002` | HW_CAN_1_ERROR | CAN1 bus communication timeout |\n\nSee full reference at **[Error Codes Reference](/docs/errors)**.\n\n---\n\n### section_id (Optimistic Locking)\nEvery PUT request must include `section_id` matching the current server value.\nIf mismatched → **409 / VAL_CONFLICT** → client must GET again and retry.",
       version: "1.0.0",
       contact: { url: "https://car-hmi-api-demo.onrender.com" }
     },
@@ -260,7 +260,7 @@ window.onload = function () {
         get: {
           tags: ["Signals"],
           summary: "Current snapshot of all signal values",
-          description: "One-time snapshot. Use for initial load; then use **WebSocket** `/ws/signals` for realtime updates.",
+          description: "One-time snapshot. Use for initial load; then use **WebSocket** `/ws/signals` for realtime updates. Each signal now includes `std_name` (standardized name alias from `signal_std_name.json`).",
           operationId: "getSignals",
           responses: {
             "200": {
@@ -271,13 +271,13 @@ window.onload = function () {
                   example: {
                     timestamp: "2024-06-01T12:00:00.123Z",
                     signals: [
-                      { name: "ARS_FL_InjuryRiskAdaptive",      value: 23,   timestamp: 1717243200.123 },
-                      { name: "ARS_FL_TimeToFireAirbag",        value: 1500, timestamp: 1717243200.123 },
-                      { name: "OMS_FL_HandsOnWheel",            value: 3,    timestamp: 1717243200.123 },
-                      { name: "OMS_FL_OccupantWeightMean_kg",   value: 72,   timestamp: 1717243200.123 },
-                      { name: "ACR_FL_RetractRequest",          value: 0,    timestamp: 1717243200.123 },
-                      { name: "ACR_FR_RetractRequest",          value: 0,    timestamp: 1717243200.123 },
-                      { name: "HMI_CrashSeverity",             value: 0,    timestamp: 1717243200.123 }
+                      { name: "ARS_FL_InjuryRiskAdaptive",      std_name: "ARS_FL_InjuryRiskAdaptive",     value: 23,   timestamp: 1717243200.123 },
+                      { name: "ARS_FL_TimeToFireAirbag",        std_name: "ARS_FL_TimeToFireAirbag",       value: 1500, timestamp: 1717243200.123 },
+                      { name: "OMS_FL_HandsOnWheel",            std_name: "OMS_FL_HandsOnWheel",           value: 3,    timestamp: 1717243200.123 },
+                      { name: "OMS_FL_OccupantWeightMean_kg",   std_name: "OMS_FL_OccupantWeightMean",     value: 72,   timestamp: 1717243200.123 },
+                      { name: "ACR_FL_RetractRequest",          std_name: "ACR_FL_RetractRequest",         value: 0,    timestamp: 1717243200.123 },
+                      { name: "ACR_FR_RetractRequest",          std_name: "ACR_FR_RetractRequest",         value: 0,    timestamp: 1717243200.123 },
+                      { name: "HMI_CrashSeverity",             std_name: "HMI_CrashSeverity",            value: 0,    timestamp: 1717243200.123 }
                     ]
                   }
                 }
@@ -300,13 +300,13 @@ window.onload = function () {
                   schema: { $ref: "#/components/schemas/SignalsAvailableResponse" },
                   example: {
                     signals_info: [
-                      { name: "ARS_FL_InjuryRiskAdaptive",    unit: "",  min: 0, max: 100,  writable: false, description: "FL airbag injury risk adaptive",   states: [], value: 23  },
-                      { name: "OMS_FL_HandsOnWheel",          unit: "",  min: 0, max: 7,    writable: false, description: "FL occupant hands on wheel",       states: [{value:0,description:"No Hand"},{value:1,description:"One Hand"},{value:2,description:"Two Hands"},{value:3,description:"Hands Near"},{value:4,description:"Unknown"}], value: 3 },
-                      { name: "OMS_FL_OccupantWeightMean_kg", unit: "",  min: 0, max: 255,  writable: false, description: "FL occupant weight mean (kg)",      states: [], value: 72  },
-                      { name: "SMA_VehicleStable",            unit: "",  min: 0, max: 1,    writable: false, description: "Vehicle stability flag",           states: [], value: 1   },
-                      { name: "ACR_FL_RetractRequest",        unit: "",  min: 0, max: 255,  writable: true,  description: "FL ACR retract request",          states: [{value:0,description:"No Action"},{value:1,description:"Slack Removal"},{value:2,description:"Retract Level 1"},{value:3,description:"Retract Level 2"}], value: 0 },
-                      { name: "ACR_FR_RetractRequest",        unit: "",  min: 0, max: 255,  writable: true,  description: "FR ACR retract request",          states: [{value:0,description:"No Action"},{value:1,description:"Slack Removal"},{value:2,description:"Retract Level 1"},{value:3,description:"Retract Level 2"}], value: 0 },
-                      { name: "HMI_CrashSeverity",           unit: "",  min: 0, max: 7,    writable: true,  description: "HMI crash severity command",      states: [], value: 0   }
+                      { name: "ARS_FL_InjuryRiskAdaptive",    std_name: "ARS_FL_InjuryRiskAdaptive",    unit: "",  min: 0, max: 100,  writable: false, description: "FL airbag injury risk adaptive",   states: [], value: 23  },
+                      { name: "OMS_FL_HandsOnWheel",          std_name: "OMS_FL_HandsOnWheel",          unit: "",  min: 0, max: 7,    writable: false, description: "FL occupant hands on wheel",       states: [{value:0,description:"No Hand"},{value:1,description:"One Hand"},{value:2,description:"Two Hands"},{value:3,description:"Hands Near"},{value:4,description:"Unknown"}], value: 3 },
+                      { name: "OMS_FL_OccupantWeightMean_kg", std_name: "OMS_FL_OccupantWeightMean",     unit: "",  min: 0, max: 255,  writable: false, description: "FL occupant weight mean (kg)",      states: [], value: 72  },
+                      { name: "SMA_VehicleStable",            std_name: "SMA_VehicleStable",            unit: "",  min: 0, max: 1,    writable: false, description: "Vehicle stability flag",           states: [], value: 1   },
+                      { name: "ACR_FL_RetractRequest",        std_name: "ACR_FL_RetractRequest",        unit: "",  min: 0, max: 255,  writable: true,  description: "FL ACR retract request",          states: [{value:0,description:"No Action"},{value:1,description:"Slack Removal"},{value:2,description:"Retract Level 1"},{value:3,description:"Retract Level 2"}], value: 0 },
+                      { name: "ACR_FR_RetractRequest",        std_name: "ACR_FR_RetractRequest",        unit: "",  min: 0, max: 255,  writable: true,  description: "FR ACR retract request",          states: [{value:0,description:"No Action"},{value:1,description:"Slack Removal"},{value:2,description:"Retract Level 1"},{value:3,description:"Retract Level 2"}], value: 0 },
+                      { name: "HMI_CrashSeverity",           std_name: "HMI_CrashSeverity",           unit: "",  min: 0, max: 7,    writable: true,  description: "HMI crash severity command",      states: [], value: 0   }
                     ]
                   }
                 }
@@ -319,7 +319,7 @@ window.onload = function () {
         post: {
           tags: ["Signals"],
           summary: "Write multiple writable signals simultaneously (batch)",
-          description: "Bulk write — sync multiple writable signals in a single request.",
+          description: "Bulk write — sync multiple writable signals in a single request. Each item can specify `name`, `signal_name`, **or** `std_name` to identify the signal.",
           operationId: "batchUpdateSignals",
           requestBody: {
             required: true,
@@ -342,7 +342,7 @@ window.onload = function () {
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/BatchSignalWriteAccepted" },
-                  example: { status: "queued", count: 2, results: [ { name: "ACR_FL_RetractRequest", value: 2, status: "ok" }, { name: "ARS_FL_InjuryRiskAdaptive", value: 1, status: "not_writable" } ] }
+                  example: { status: "queued", count: 2, results: [ { name: "ACR_FL_RetractRequest", std_name: "ACR_FL_RetractRequest", value: 2, status: "ok" }, { name: "ARS_FL_InjuryRiskAdaptive", std_name: "ARS_FL_InjuryRiskAdaptive", value: 1, status: "not_writable" } ] }
                 }
               }
             },
@@ -354,7 +354,7 @@ window.onload = function () {
         put: {
           tags: ["Signals"],
           summary: "Write a value to a writable signal",
-          description: "Forwarded to CAN writer. Only applies to signals with `writable: true`.",
+          description: "Forwarded to CAN writer. Only applies to signals with `writable: true`. The path param `signal_name` chấp nhận cả `name` gốc hoặc `std_name`.",
           operationId: "updateSignal",
           parameters: [
             { name: "signal_name", in: "path", required: true,
@@ -371,7 +371,7 @@ window.onload = function () {
             }
           },
           responses: {
-            "202": { description: "Accepted - signal queued for CAN write", content: { "application/json": { schema: { $ref: "#/components/schemas/SignalWriteAccepted" }, example: { signal_name: "ACR_FL_RetractRequest", value: 2, queued_at: 1717243200.123 } } } },
+            "202": { description: "Accepted - signal queued for CAN write", content: { "application/json": { schema: { $ref: "#/components/schemas/SignalWriteAccepted" }, example: { signal_name: "ACR_FL_RetractRequest", std_name: "ACR_FL_RetractRequest", value: 2, queued_at: 1717243200.123 } } } },
             "403": { description: "Forbidden - signal is read-only (TX: false)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" }, example: { error: "Not writable" } } } },
             "404": { description: "Signal not found",             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" }, example: { error: "Not found" } } } }
           }
@@ -532,6 +532,7 @@ window.onload = function () {
           type: "object",
           properties: {
             name:        { type: "string",  example: "ARS_FL_InjuryRiskAdaptive" },
+            std_name:    { type: "string",  example: "ARS_FL_InjuryRiskAdaptive", description: "Standardized name alias from signal_std_name.json" },
             unit:        { type: "string",  example: "rpm" },
             min:         { type: "number",  example: 0 },
             max:         { type: "number",  example: 8000 },
@@ -545,6 +546,7 @@ window.onload = function () {
           type: "object",
           properties: {
             name:      { type: "string", example: "ARS_FL_InjuryRiskAdaptive" },
+            std_name:  { type: "string", example: "ARS_FL_InjuryRiskAdaptive", description: "Standardized name alias from signal_std_name.json" },
             value:     { type: "number", example: 3000 },
             timestamp: { type: "number", description: "Unix epoch seconds", example: 1717243200.123 }
           }
@@ -601,6 +603,7 @@ window.onload = function () {
           type: "object",
           properties: {
             signal_name: { type: "string",  example: "ACR_FL_RetractRequest" },
+            std_name:    { type: "string",  example: "ACR_FL_RetractRequest" },
             value:       { type: "number",  example: 2 },
             queued_at:   { type: "number",  description: "Unix epoch seconds", example: 1717243200.123 }
           }
@@ -613,9 +616,10 @@ window.onload = function () {
             results: { type: "array", items: {
               type: "object",
               properties: {
-                name:   { type: "string", example: "ACR_FL_RetractRequest" },
-                value:  { type: "number", example: 2 },
-                status: { type: "string", enum: ["ok","not_writable","not_found","out_of_range"], example: "ok" }
+                name:     { type: "string", example: "ACR_FL_RetractRequest" },
+                std_name: { type: "string", example: "ACR_FL_RetractRequest" },
+                value:    { type: "number", example: 2 },
+                status:   { type: "string", enum: ["ok","not_writable","not_found","out_of_range"], example: "ok" }
               }
             }}
           }

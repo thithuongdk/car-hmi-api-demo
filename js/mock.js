@@ -7,8 +7,45 @@
 // ── Default data ──────────────────────────────────────────────────────────────
 // Populated asynchronously by Store.init() from data/can0.json (path in config.json)
 let _SIGNALS_META = [];
+let _SIGNAL_STD_MAP = {};
 let _INFO_DATA = null;    // populated from data/info.json
 let _CONFIG_DATA = null;  // populated from data/config.json
+let _SIGNALS_BY_NAME = new Map();
+let _SIGNALS_BY_STD_NAME = new Map();
+
+function _rebuildSignalLookups() {
+  _SIGNALS_BY_NAME = new Map(_SIGNALS_META.map(s => [s.name, s]));
+  _SIGNALS_BY_STD_NAME = new Map(_SIGNALS_META.map(s => [s.std_name || s.name, s.name]));
+}
+
+function _resolveSignalName(ref) {
+  if (!ref) return null;
+  if (_SIGNALS_BY_NAME.has(ref)) return ref;
+  return _SIGNALS_BY_STD_NAME.get(ref) || null;
+}
+
+function _resolveSignalMeta(ref) {
+  const name = _resolveSignalName(ref);
+  return name ? _SIGNALS_BY_NAME.get(name) || null : null;
+}
+
+function _signalPayload(name, value, timestamp) {
+  const meta = _SIGNALS_BY_NAME.get(name);
+  if (!meta) return null;
+  const sv = Store.get().signal_values[name];
+  return {
+    name: meta.name,
+    std_name: meta.std_name || meta.name,
+    value: value ?? sv?.value ?? 0,
+    timestamp: timestamp ?? sv?.timestamp ?? null,
+  };
+}
+
+function _normalizeSignalList(signals) {
+  if (signals === '*') return '*';
+  if (!Array.isArray(signals)) return [];
+  return [...new Set(signals.map(_resolveSignalName).filter(Boolean))];
+}
 
 /**
  * Flatten can0.json messages → array of signal meta objects.
@@ -23,6 +60,7 @@ function _parseCan0Signals(can0) {
       seen.add(sigName);
       signals.push({
         name:        sigName,
+        std_name:    _SIGNAL_STD_MAP[sigName] || sigName,
         unit:        sig.unit        || '',
         min:         sig.minimum     ?? 0,
         max:         sig.maximum     ?? 0,
@@ -136,6 +174,12 @@ const Store = (() => {
 
   /** Fetch can0.json (path from config.json) and populate _SIGNALS_META. Must be awaited before first get(). */
   async function init() {
+    // Load std-name aliases first so signal metadata can include std_name.
+    try {
+      const sr = await fetch('data/signal_std_name.json');
+      if (sr.ok) _SIGNAL_STD_MAP = await sr.json();
+    } catch (_) { /* silent */ }
+
     // Load config first to resolve the CAN DB path
     let can0Path = 'data/can0.json';
     try {
@@ -156,6 +200,7 @@ const Store = (() => {
       console.warn('[Store.init] Could not load CAN DB from', can0Path, '- using fallback signals.', e);
       _SIGNALS_META = JSON.parse(JSON.stringify(_FALLBACK_SIGNALS_META));
     }
+    _rebuildSignalLookups();
     // Fetch project info (non-critical - app works fine without it)
     try {
       const ir = await fetch('data/info.json');
@@ -376,7 +421,12 @@ const MockAPI = {
   async getSignals() {
     await delay();
     const d = Store.get();
-    const signals = Object.entries(d.signal_values).map(([name, sv]) => ({ name, value: sv.value, timestamp: sv.timestamp }));
+    const signals = Object.entries(d.signal_values).map(([name, sv]) => ({
+      name,
+      std_name: _SIGNALS_BY_NAME.get(name)?.std_name || name,
+      value: sv.value,
+      timestamp: sv.timestamp,
+    }));
     const res = { timestamp: new Date().toISOString(), signals };
     Log.api("GET", "/signals", null, res);
     return res;
@@ -399,13 +449,13 @@ const MockAPI = {
   async updateSignal(name, value) {
     await delay();
     const d = Store.get();
-    const meta = d.signals_meta.find(s => s.name === name);
+    const meta = _resolveSignalMeta(name);
     if (!meta)          { Log.api("PUT", `/signals/${name}`, { value }, { error: "Not found" }, 404);       throw new Error(`Signal '${name}' not found`); }
     if (!meta.writable) { Log.api("PUT", `/signals/${name}`, { value }, { error: "Not writable" }, 403);   throw new Error(`Signal '${name}' is not writable`); }
     const v = typeof value === "number" ? value : parseFloat(value);
-    d.signal_values[name] = { value: v, timestamp: Date.now() / 1000 };
+    d.signal_values[meta.name] = { value: v, timestamp: Date.now() / 1000 };
     Store.save();
-    const res = { signal_name: name, value: v, queued_at: Date.now() / 1000 };
+    const res = { signal_name: meta.name, std_name: meta.std_name || meta.name, value: v, queued_at: Date.now() / 1000 };
     Log.api("PUT", `/signals/${name}`, { value }, res, 202);
     return res;
   },
@@ -428,14 +478,16 @@ const MockAPI = {
     await delay();
     const d = Store.get();
     const results = [];
-    for (const { name, value } of signals) {
-      const meta = d.signals_meta.find(s => s.name === name);
+    for (const item of signals) {
+      const ref = item?.name ?? item?.signal_name ?? item?.std_name;
+      const value = item?.value;
+      const meta = _resolveSignalMeta(ref);
       if (meta && meta.writable) {
         const v = typeof value === "number" ? value : parseFloat(value);
-        d.signal_values[name] = { value: v, timestamp: Date.now() / 1000 };
-        results.push({ name, value: v, status: "ok" });
+        d.signal_values[meta.name] = { value: v, timestamp: Date.now() / 1000 };
+        results.push({ name: meta.name, std_name: meta.std_name || meta.name, value: v, status: "ok" });
       } else {
-        results.push({ name, value, status: meta ? "not_writable" : "not_found" });
+        results.push({ name: ref, std_name: ref, value, status: meta ? "not_writable" : "not_found" });
       }
     }
     Store.save();
@@ -578,12 +630,12 @@ class MockWebSocket {
           nv = Math.max(min, Math.min(max, curNorm + dir * step));
         }
         d2.signal_values[s.name] = { value: nv, timestamp: Date.now() / 1000 };
-        updates.push({ name: s.name, value: nv });
+        updates.push({ name: s.name, value: nv, timestamp: Date.now() / 1000 });
       });
       Store.save();
 
       if (updates.length && this.onmessage) {
-        const msg = JSON.stringify({ timestamp: new Date().toISOString(), signals: updates });
+        const msg = JSON.stringify({ timestamp: new Date().toISOString(), signals: updates.map(u => _signalPayload(u.name, u.value, u.timestamp)).filter(Boolean) });
         this.onmessage({ data: msg });
       }
     }, intervalMs);
@@ -601,7 +653,7 @@ class MockWebSocket {
     const snap = (this._subscription
       ? d.signals_meta.filter(s => this._subscription.has(s.name))
       : d.signals_meta.filter(s => !s.writable)
-    ).map(s => ({ name: s.name, value: d.signal_values[s.name]?.value ?? 0 }));
+    ).map(s => _signalPayload(s.name));
     if (snap.length)
       this.onmessage?.({ data: JSON.stringify({ timestamp: new Date().toISOString(), signals: snap }) });
   }
@@ -617,12 +669,10 @@ class MockWebSocket {
         break;
 
       case 'subscribe': {
-        const d = Store.get();
         if (!msg.signals || msg.signals === '*') {
           this._subscription = null;
         } else if (Array.isArray(msg.signals)) {
-          const valid = new Set(d.signals_meta.map(s => s.name));
-          this._subscription = new Set(msg.signals.filter(n => valid.has(n)));
+          this._subscription = new Set(_normalizeSignalList(msg.signals));
         }
         this._ackSubscription();
         break;
@@ -635,7 +685,7 @@ class MockWebSocket {
             // was "all" → convert to full set then remove
             this._subscription = new Set(d.signals_meta.filter(s => !s.writable).map(s => s.name));
           }
-          msg.signals.forEach(n => this._subscription.delete(n));
+          _normalizeSignalList(msg.signals).forEach(n => this._subscription.delete(n));
           this._ackSubscription();
         }
         break;

@@ -60,8 +60,8 @@ GET    /config                    — editable config snapshot
 PUT    /config                    — update config (section_id required)
 
 # Signals
-GET    /signals                   — snapshot current values
-GET    /signals/available         — full metadata (unit, min, max, writable, states)
+GET    /signals                   — snapshot current values (includes `std_name`)
+GET    /signals/available         — full metadata (unit, min, max, writable, states, std_name)
 PUT    /signals/{signal_name}     — write single writable signal → 202 + WS broadcast
 POST   /signals/batch_update      — batch write writable signals → 202 + WS broadcast
 
@@ -69,12 +69,17 @@ POST   /signals/batch_update      — batch write writable signals → 202 + WS 
 WS     /ws/signals                — real-time signal stream (500ms, per-client subscription)
 ```
 
+> **Signal Alias (`std_name`):** Mọi API endpoint (REST write, batch update, WebSocket subscribe/unsubscribe) đều chấp nhận cả `name` (signal_name gốc trong CAN DB) **và** `std_name` (tên chuẩn hóa từ `data/signal_std_name.json`). Response luôn trả về cả hai trường `name` + `std_name` trong payload signal.
+
 ## WebSocket Subscription Protocol
 
 ```js
 // Subscribe to specific signals (after connect)
 ws.send(JSON.stringify({ type: 'subscribe', signals: ['ARS_FL_InjuryRiskAdaptive', 'OMS_FL_HandsOnWheel'] }));
 // ← { type: 'subscribed', signals: [...], count: 2 }  + immediate snapshot
+
+// Subscribe using std_name aliases (also accepted)
+ws.send(JSON.stringify({ type: 'subscribe', signals: ['OMS_FL_OccupantWeightMean', 'OMS_FL_OccupantHeightMean'] }));
 
 // Subscribe to all signals
 ws.send(JSON.stringify({ type: 'subscribe', signals: '*' }));
@@ -85,6 +90,16 @@ ws.send(JSON.stringify({ type: 'unsubscribe', signals: ['OMS_FL_HandsOnWheel'] }
 // Keepalive
 ws.send(JSON.stringify({ type: 'ping' }));
 // ← { type: 'pong' }
+```
+
+**Signal frame format** (REST + WS):
+```json
+{
+  "name": "OMS_FL_OccupantWeightMean_kg",
+  "std_name": "OMS_FL_OccupantWeightMean",
+  "value": 72,
+  "timestamp": 1717243200.123
+}
 ```
 
 **Cross-tab write broadcast**: khi TabA gọi `PUT /signals/ACR_FL_RetractRequest`, giá trị mới được push ngay tới tất cả WS clients đang subscribe signal đó.
@@ -131,8 +146,22 @@ Cấu trúc: `{ messages: { MsgName: { id, size, senders, signals: { SigName: { 
 ## Tests
 
 ```bash
-node _test_mock.js   # 39 tests — Store, Profiles CRUD, Config, Signals, WS subscription
+# Run all tests (server + WS + DBC + stress)
+node tests/run_all_tests.js
+
+# Quick mode — offline tests only (mock + DBC parser)
+node tests/run_all_tests.js --quick
+
+# Individual test suites
+node _test_mock.js                     # 39+ tests — Mock API (Store, Profiles, Config, Signals, WS)
+node tests/test_dbc2signal.js          # 20+ tests — DBC parser (parsing, TX/RX, units, backup)
+node tests/test_server_api.js          # 30+ tests — Express REST API (all endpoints, CORS, errors)
+node tests/test_websocket.js           # 15+ tests — WebSocket (subscribe, ping/pong, multi-client)
+node tests/test_stress.js              # 6 tests — Load (burst, concurrent, WS storm)
 ```
+
+> **Note:** Server tests (`test_server_api.js`, `test_websocket.js`, `test_stress.js`) tự động
+> start Express server trên port ngẫu nhiên — không cần chạy `server.js` riêng.
 
 ---
 
@@ -166,7 +195,8 @@ car-hmi-api-demo/
 ├── data/
 │   ├── can0.json     — CAN database (167 signals)
 │   ├── config.json   — server config
-│   └── info.json     — user profiles
+│   ├── info.json     — user profiles
+│   └── signal_std_name.json  — signal_name → std_name alias map
 ├── css/
 │   └── style.css     — Dark theme
 ├── docs/

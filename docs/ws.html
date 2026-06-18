@@ -330,6 +330,9 @@
     <div id="overview" style="margin-bottom:48px; padding-bottom:28px; border-bottom:1px solid var(--border)">
       <h1>WebSocket Endpoint</h1>
       <p style="font-size:15px">Realtime CAN signal stream — the backend pushes updates at the <code>sampling_rate</code> of the active config. The frontend only needs one persistent connection to receive all signals.</p>
+      <div class="info-box">
+        <strong>Signal Alias:</strong> Mọi subscribe/unsubscribe đều chấp nhận cả <code>name</code> (tên gốc trong CAN DB) <strong>và</strong> <code>std_name</code> (tên chuẩn hóa từ <code>data/signal_std_name.json</code>). Payload signal trong mỗi frame luôn trả về cả <code>name</code> + <code>std_name</code>.
+      </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px">
         <a class="btn btn-green" href="#live-demo">&#9654; Live Demo</a>
         <a class="btn" href="/docs">REST API Swagger &#8599;</a>
@@ -405,13 +408,13 @@
       <div class="code-block">{
   <span class="c-key">"timestamp"</span>: <span class="c-str">"2024-06-01T12:00:00.123Z"</span>,   <span class="c-cmt">// ISO 8601 UTC</span>
   <span class="c-key">"signals"</span>: [
-    { <span class="c-key">"name"</span>: <span class="c-str">"ARS_FL_InjuryRiskAdaptive"</span>,    <span class="c-key">"value"</span>: <span class="c-num">23</span>   },
-    { <span class="c-key">"name"</span>: <span class="c-str">"ARS_FL_TimeToFireAirbag"</span>,      <span class="c-key">"value"</span>: <span class="c-num">1500</span> },
-    { <span class="c-key">"name"</span>: <span class="c-str">"OMS_FL_HandsOnWheel"</span>,          <span class="c-key">"value"</span>: <span class="c-num">3</span>    },
-    { <span class="c-key">"name"</span>: <span class="c-str">"OMS_FL_OccupantWeightMean_kg"</span>, <span class="c-key">"value"</span>: <span class="c-num">72</span>   },
-    { <span class="c-key">"name"</span>: <span class="c-str">"ACR_FL_RetractRequest"</span>,        <span class="c-key">"value"</span>: <span class="c-num">0</span>    },
-    { <span class="c-key">"name"</span>: <span class="c-str">"ACR_FR_RetractRequest"</span>,        <span class="c-key">"value"</span>: <span class="c-num">0</span>    },
-    { <span class="c-key">"name"</span>: <span class="c-str">"HMI_CrashSeverity"</span>,           <span class="c-key">"value"</span>: <span class="c-num">0</span>    }
+    { <span class="c-key">"name"</span>: <span class="c-str">"ARS_FL_InjuryRiskAdaptive"</span>,    <span class="c-key">"std_name"</span>: <span class="c-str">"ARS_FL_InjuryRiskAdaptive"</span>,    <span class="c-key">"value"</span>: <span class="c-num">23</span>   },
+    { <span class="c-key">"name"</span>: <span class="c-str">"ARS_FL_TimeToFireAirbag"</span>,      <span class="c-key">"std_name"</span>: <span class="c-str">"ARS_FL_TimeToFireAirbag"</span>,      <span class="c-key">"value"</span>: <span class="c-num">1500</span> },
+    { <span class="c-key">"name"</span>: <span class="c-str">"OMS_FL_HandsOnWheel"</span>,          <span class="c-key">"std_name"</span>: <span class="c-str">"OMS_FL_HandsOnWheel"</span>,          <span class="c-key">"value"</span>: <span class="c-num">3</span>    },
+    { <span class="c-key">"name"</span>: <span class="c-str">"OMS_FL_OccupantWeightMean_kg"</span>, <span class="c-key">"std_name"</span>: <span class="c-str">"OMS_FL_OccupantWeightMean"</span>,   <span class="c-key">"value"</span>: <span class="c-num">72</span>   },
+    { <span class="c-key">"name"</span>: <span class="c-str">"ACR_FL_RetractRequest"</span>,        <span class="c-key">"std_name"</span>: <span class="c-str">"ACR_FL_RetractRequest"</span>,        <span class="c-key">"value"</span>: <span class="c-num">0</span>    },
+    { <span class="c-key">"name"</span>: <span class="c-str">"ACR_FR_RetractRequest"</span>,        <span class="c-key">"std_name"</span>: <span class="c-str">"ACR_FR_RetractRequest"</span>,        <span class="c-key">"value"</span>: <span class="c-num">0</span>    },
+    { <span class="c-key">"name"</span>: <span class="c-str">"HMI_CrashSeverity"</span>,           <span class="c-key">"std_name"</span>: <span class="c-str">"HMI_CrashSeverity"</span>,           <span class="c-key">"value"</span>: <span class="c-num">0</span>    }
   ]
 }</div>
 
@@ -422,6 +425,7 @@
             <tr><td><code>timestamp</code></td><td>string (ISO 8601)</td><td>Frame creation time, UTC</td></tr>
             <tr><td><code>signals[]</code></td><td>array</td><td>List of signal updates in this frame</td></tr>
             <tr><td><code>signals[].name</code></td><td>string</td><td>Signal name — matches <code>GET /signals/available</code></td></tr>
+            <tr><td><code>signals[].std_name</code></td><td>string</td><td>Standardized name alias from <code>signal_std_name.json</code></td></tr>
             <tr><td><code>signals[].value</code></td><td>number</td><td>Current value. Enum signals: integer (state index)</td></tr>
           </tbody>
         </table>
@@ -451,6 +455,7 @@
     <section id="msg-client">
       <h2>Client → Server Messages</h2>
       <p>Clients can control which signals they receive by sending <code>subscribe</code> or <code>unsubscribe</code> messages.
+         Có thể dùng cả <code>name</code> gốc hoặc <code>std_name</code> để chỉ định signal.
          To write a signal value, use REST <code>PUT /signals/{name}</code> or <code>POST /signals/batch_update</code>.</p>
 
       <h3>Subscribe</h3>
@@ -462,12 +467,15 @@ ws.<span class="c-fn">send</span>(JSON.<span class="c-fn">stringify</span>({
   <span class="c-key">"signals"</span>: [<span class="c-str">"ARS_FL_InjuryRiskAdaptive"</span>, <span class="c-str">"OMS_FL_HandsOnWheel"</span>, <span class="c-str">"ACR_FL_RetractRequest"</span>]
 }));
 
+<span class="c-cmt">// Subscribe using std_name aliases (also accepted)</span>
+ws.<span class="c-fn">send</span>(JSON.<span class="c-fn">stringify</span>({ <span class="c-key">"type"</span>: <span class="c-str">"subscribe"</span>, <span class="c-key">"signals"</span>: [<span class="c-str">"OMS_FL_OccupantWeightMean"</span>, <span class="c-str">"OMS_RL1_SeatbeltMisuse"</span>] }));
+
 <span class="c-cmt">// Subscribe to ALL signals (default)</span>
 ws.<span class="c-fn">send</span>(JSON.<span class="c-fn">stringify</span>({ <span class="c-key">"type"</span>: <span class="c-str">"subscribe"</span>, <span class="c-key">"signals"</span>: <span class="c-str">"*"</span> }));
 
 <span class="c-cmt">// ← Server responds immediately:</span>
 <span class="c-cmt">// { "type": "subscribed", "signals": ["ARS_FL_InjuryRiskAdaptive","OMS_FL_HandsOnWheel","ACR_FL_RetractRequest"], "count": 3 }</span>
-<span class="c-cmt">// { "timestamp": "...", "signals": [{"name":"ARS_FL_InjuryRiskAdaptive","value":23}, ...] }  ← snapshot</span></div>
+<span class="c-cmt">// { "timestamp": "...", "signals": [{"name":"ARS_FL_InjuryRiskAdaptive","std_name":"ARS_FL_InjuryRiskAdaptive","value":23}, ...] }  ← snapshot</span></div>
 
       <h3>Unsubscribe</h3>
       <p>Remove specific signals from the active subscription without affecting the rest.</p>

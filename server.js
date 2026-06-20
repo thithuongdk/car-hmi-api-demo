@@ -460,7 +460,11 @@ function scoreCandidate(candidate, expected) {
   if (candidate.seatbelt === expected.seatbelt) score += 3.0;
   if (candidate.percentile === expected.percentile) score += 2.0;
   if (candidate.seat_position === expected.seatPosition) score += 1.0;
-  score += Math.max(0, 1 - (Math.abs(candidate.velocity_kmh - expected.velocityKmh) / 21));
+  
+  if (candidate.velocity_kmh === expected.velocityKmh) {
+    score += 4;
+  }
+
   return Number(score.toFixed(3));
 }
 

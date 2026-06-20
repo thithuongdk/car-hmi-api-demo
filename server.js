@@ -575,6 +575,20 @@ app.get('/api/restraints/match', (req, res) => {
   });
 });
 
+// Map file extension → MIME type for video streaming
+function getMimeType(filename) {
+  const ext = String(filename || '').toLowerCase().split('.').pop();
+  const mimes = {
+    mp4: 'video/mp4',
+    webm: 'video/webm',
+    avi: 'video/x-msvideo',
+    mov: 'video/quicktime',
+    mkv: 'video/x-matroska',
+    flv: 'video/x-flv',
+  };
+  return mimes[ext] || 'application/octet-stream';
+}
+
 app.get('/api/restraints/video/:filename', (req, res) => {
   const filename = String(req.params.filename || '');
   if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
@@ -590,7 +604,43 @@ app.get('/api/restraints/video/:filename', (req, res) => {
     return err(res, 3004, 'VAL_NOT_FOUND', 'video file not found', 404);
   }
 
-  return res.sendFile(targetPath);
+  const stat = fs.statSync(targetPath);
+  const fileSize = stat.size;
+  const mimeType = getMimeType(filename);
+  const range = req.headers.range;
+
+  // ── Handle HTTP Range requests (for video streaming) ────────────────────────
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+    if (isNaN(start) || start >= fileSize || (end && end < start)) {
+      return res.status(416).set({
+        'Content-Range': `bytes */${fileSize}`,
+      }).send('Invalid Range');
+    }
+
+    const chunksize = (end - start) + 1;
+    res.status(206).set({
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunksize,
+      'Content-Type': mimeType,
+      'Cache-Control': 'public, max-age=3600',
+    });
+
+    return fs.createReadStream(targetPath, { start, end }).pipe(res);
+  }
+
+  // ── No Range header: send full file ────────────────────────────────────────
+  res.set({
+    'Accept-Ranges': 'bytes',
+    'Content-Length': fileSize,
+    'Content-Type': mimeType,
+    'Cache-Control': 'public, max-age=3600',
+  });
+  return fs.createReadStream(targetPath).pipe(res);
 });
 
 // Static: serve everything after API routes

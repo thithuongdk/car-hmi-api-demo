@@ -611,26 +611,30 @@ app.get('/api/restraints/video/:filename', (req, res) => {
 
   // ── Handle HTTP Range requests (for video streaming) ────────────────────────
   if (range) {
-    const parts = range.replace(/bytes=/, '').split('-');
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
 
-    if (isNaN(start) || start >= fileSize || (end && end < start)) {
-      return res.status(416).set({
-        'Content-Range': `bytes */${fileSize}`,
-      }).send('Invalid Range');
-    }
+      // FIX thêm:
+      const validStart = isNaN(start) ? 0 : start;
+      const validEnd = isNaN(end) ? fileSize - 1 : end;
 
-    const chunksize = (end - start) + 1;
-    res.status(206).set({
-      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-      'Accept-Ranges': 'bytes',
-      'Content-Length': chunksize,
-      'Content-Type': mimeType,
-      'Cache-Control': 'public, max-age=3600',
-    });
+      if (validStart >= fileSize || validEnd >= fileSize || validStart > validEnd) {
+        return res.status(416).set({
+          'Content-Range': `bytes */${fileSize}`,
+        }).end();
+      }
 
-    return fs.createReadStream(targetPath, { start, end }).pipe(res);
+      const chunkSize = (validEnd - validStart) + 1;
+
+      res.status(206).set({
+        'Content-Range': `bytes ${validStart}-${validEnd}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': mimeType,
+      });
+
+      fs.createReadStream(targetPath, { start: validStart, end: validEnd }).pipe(res);
   }
 
   // ── No Range header: send full file ────────────────────────────────────────

@@ -615,26 +615,26 @@ app.get('/api/restraints/video/:filename', (req, res) => {
       const start = parseInt(parts[0], 10);
       const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
 
-      // FIX thêm:
       const validStart = isNaN(start) ? 0 : start;
       const validEnd = isNaN(end) ? fileSize - 1 : end;
 
       if (validStart >= fileSize || validEnd >= fileSize || validStart > validEnd) {
-        return res.status(416).set({
-          'Content-Range': `bytes */${fileSize}`,
-        }).end();
+          return res.status(416).set({
+              'Content-Range': `bytes */${fileSize}`,
+          }).end();
       }
 
       const chunkSize = (validEnd - validStart) + 1;
 
       res.status(206).set({
-        'Content-Range': `bytes ${validStart}-${validEnd}/${fileSize}`,
-        'Accept-Ranges': 'bytes',
-        'Content-Length': chunkSize,
-        'Content-Type': mimeType,
+          'Content-Range': `bytes ${validStart}-${validEnd}/${fileSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize,
+          'Content-Type': mimeType,
       });
 
-      fs.createReadStream(targetPath, { start: validStart, end: validEnd }).pipe(res);
+      // ✅ CRITICAL FIX
+      return fs.createReadStream(targetPath, { start: validStart, end: validEnd }).pipe(res);
   }
 
   // ── No Range header: send full file ────────────────────────────────────────

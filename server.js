@@ -519,7 +519,8 @@ app.get('/api/restraints/match', (req, res) => {
 
   const derivedPercentile = derivePercentileFromWeight(weightKg);
   const canPercentile = resolvePercentileFromCan(canOccRaw);
-  const effectivePercentile = canPercentile ?? derivedPercentile;
+  // const effectivePercentile = canPercentile ?? derivedPercentile;
+  const effectivePercentile = derivedPercentile;
   const seatPositionZone = resolveSeatPositionZone(seatXmm);
 
   const expected = {

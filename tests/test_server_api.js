@@ -324,27 +324,38 @@ async function runTests() {
 
   // ── GET /api/restraints/match ─────────────────────────────────────────────
   console.log('\n━━━ GET /api/restraints/match ─────────────────────────────────');
-  const rst = await request('GET', '/api/restraints/match?seat=driver&seat_belt=SLL');
+  const rst = await request('GET', '/api/restraints/match?weight=75&height=175&crash_severity=40&seatbelt_system=SLL&seat=fl');
   ok('200 OK',                          rst.status === 200);
-  ok('matched = true',                  rst.body?.matched === true);
-  ok('has video.filename',              !!rst.body?.video?.filename);
-  ok('has video.percentile',            typeof rst.body?.video?.percentile === 'number');
-  ok('has score',                       typeof rst.body?.score === 'number');
-  ok('filename includes _SLL.mp4',      rst.body.video.filename.endsWith('_SLL.mp4'));
-  console.log(`   video: ${rst.body.video.filename}, score: ${rst.body.score}`);
+  ok('matched is boolean',              typeof rst.body?.matched === 'boolean');
+  ok('has context object',              typeof rst.body?.context === 'object' && rst.body.context !== null);
+  if (rst.body?.matched) {
+    ok('has video.filename',            !!rst.body?.video?.filename);
+    ok('has video.percentile',          typeof rst.body?.video?.percentile === 'number');
+    ok('has video.velocity_kmh',        typeof rst.body?.video?.velocity_kmh === 'number');
+    ok('has score',                     typeof rst.body?.score === 'number');
+    ok('filename includes _SLL',        rst.body.video.filename.includes('_SLL.'));
+    console.log(`   video: ${rst.body.video.filename}, score: ${rst.body.score}`);
+  } else {
+    ok('video is null when unmatched',  rst.body?.video === null);
+    ok('score 0 when unmatched',        rst.body?.score === 0);
+    console.log('   unmatched (no media candidates found)');
+  }
 
   // ── Missing params → 400 ──────────────────────────────────────────────────
   const noSeat = await request('GET', '/api/restraints/match');
-  ok('400 without seat param',          noSeat.status === 400);
+  ok('400 without required params',     noSeat.status === 400);
 
-  const badSeat = await request('GET', '/api/restraints/match?seat=invalid&seat_belt=SLL');
+  const badSeat = await request('GET', '/api/restraints/match?weight=75&height=175&crash_severity=40&seatbelt_system=SLL&seat=invalid');
   ok('422 with invalid seat',           badSeat.status === 422);
 
-  const badBelt = await request('GET', '/api/restraints/match?seat=driver&seat_belt=INVALID');
-  ok('422 with invalid seat_belt',      badBelt.status === 422);
+  const badBelt = await request('GET', '/api/restraints/match?weight=75&height=175&crash_severity=40&seatbelt_system=INVALID&seat=fl');
+  ok('422 with invalid seatbelt_system', badBelt.status === 422);
 
-  const badPulse = await request('GET', '/api/restraints/match?seat=driver&seat_belt=CLL&crash_pulse=INVALID');
-  ok('422 with invalid crash_pulse',    badPulse.status === 422);
+  const badCrashSeverity = await request('GET', '/api/restraints/match?weight=75&height=175&crash_severity=INVALID&seatbelt_system=CLL&seat=fl');
+  ok('422 with invalid crash_severity', badCrashSeverity.status === 422);
+
+  const missingVideo = await request('GET', '/api/restraints/video/50p_mid_40_SLL.mp4');
+  ok('404 when video file missing',     missingVideo.status === 404);
 
   // ── Static file serving ──────────────────────────────────────────────────
   console.log('\n━━━ Static File Serving ───────────────────────────────────────');

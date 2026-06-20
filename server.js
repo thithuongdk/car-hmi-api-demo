@@ -383,67 +383,214 @@ app.post('/signals/batch_update', (req, res) => {
 });
 
 // ── REST: Restraints ──────────────────────────────────────────────────────────
-const SEAT_TO_SUFFIX = {
-  driver:      'FL',
-  passenger:   'FR',
-  rear_left_row1:   'RL1',
-  rear_left_row2:  'RL2',
-  rear_right_row1: 'RR1',
+const RESTRAINTS_MEDIA_DIR = path.join(ROOT, 'media');
+const VALID_SEATBELT_SYSTEMS = ['SLL', 'CLL', 'MSLL'];
+const VALID_VELOCITIES = [35, 40, 50, 56];
+const OLC_TO_VELOCITY = { OLC16: 35, OLC18: 40, OLC26: 50, OLC33: 56 };
+const SEAT_SIGNAL_MAP = {
+  fl: {
+    occClass: 'OMS_FL_OccupantClassification',
+    oop: 'OMS_FL_OutOfPosition',
+    seatX: 'SPS_FL_SeatDirectionX',
+  },
+  fr: {
+    occClass: 'OMS_FR_OccupantClassification',
+    oop: 'OMS_FR_OutOfPosition',
+    seatX: 'SPS_FR_SeatDirectionX',
+  },
 };
-const VALID_SEAT_BELTS = ['CLL', 'SLL', 'MSLL'];
-const VALID_CRASH_PULSES = ['OLC18', 'OLC30'];
+
+function derivePercentileFromWeight(weightKg) {
+  if (weightKg < 65) return 5;
+  if (weightKg <= 90) return 50;
+  return 95;
+}
+
+function resolveVelocityFromCrashSeverity(crashSeverity) {
+  const text = String(crashSeverity || '').trim().toUpperCase();
+  if (!text) return null;
+  if (Object.prototype.hasOwnProperty.call(OLC_TO_VELOCITY, text)) return OLC_TO_VELOCITY[text];
+  const num = Number(text);
+  if (Number.isFinite(num) && VALID_VELOCITIES.includes(num)) return num;
+  return null;
+}
+
+function resolveSeatPositionZone(seatXmm) {
+  if (!Number.isFinite(seatXmm)) return 'mid';
+  if (seatXmm < 56.75) return 'front';
+  if (seatXmm < 170.25) return 'mid';
+  return 'rear';
+}
+
+function resolvePercentileFromCan(rawValue) {
+  const value = Number(rawValue);
+  if (value === 1) return 5;
+  if (value === 2) return 50;
+  if (value === 3) return 95;
+  return null;
+}
+
+function parseMediaFilename(filename) {
+  const m = String(filename || '').match(/^(5|50|95)p_(front|mid|rear)_(35|40|50|56)_(SLL|CLL|MSLL)\.[A-Za-z0-9]+$/);
+  if (!m) return null;
+  return {
+    filename,
+    percentile: Number(m[1]),
+    seat_position: m[2],
+    velocity_kmh: Number(m[3]),
+    seatbelt: m[4],
+  };
+}
+
+function listRestraintsCandidates() {
+  if (!fs.existsSync(RESTRAINTS_MEDIA_DIR)) return [];
+  const files = fs.readdirSync(RESTRAINTS_MEDIA_DIR, { withFileTypes: true });
+  const out = [];
+  for (const item of files) {
+    if (!item.isFile()) continue;
+    const parsed = parseMediaFilename(item.name);
+    if (!parsed) continue;
+    out.push(parsed);
+  }
+  return out;
+}
+
+function scoreCandidate(candidate, expected) {
+  let score = 0;
+  if (candidate.seatbelt === expected.seatbelt) score += 3.0;
+  if (candidate.percentile === expected.percentile) score += 2.0;
+  if (candidate.seat_position === expected.seatPosition) score += 1.0;
+  score += Math.max(0, 1 - (Math.abs(candidate.velocity_kmh - expected.velocityKmh) / 21));
+  return Number(score.toFixed(3));
+}
 
 app.get('/api/restraints/match', (req, res) => {
-  const { seat, seat_belt, crash_pulse = 'OLC18' } = req.query;
+  const {
+    weight,
+    height,
+    crash_severity,
+    seatbelt_system,
+    seat = 'fl',
+    seat_x_mm,
+  } = req.query;
 
-  if (!seat)      return err(res, 3002, 'VAL_MISSING_FIELD', 'seat is required', 400);
-  if (!seat_belt) return err(res, 3002, 'VAL_MISSING_FIELD', 'seat_belt is required', 400);
+  if (weight === undefined) return err(res, 3002, 'VAL_MISSING_FIELD', 'weight is required', 400);
+  if (height === undefined) return err(res, 3002, 'VAL_MISSING_FIELD', 'height is required', 400);
+  if (crash_severity === undefined) return err(res, 3002, 'VAL_MISSING_FIELD', 'crash_severity is required', 400);
+  if (seatbelt_system === undefined) return err(res, 3002, 'VAL_MISSING_FIELD', 'seatbelt_system is required', 400);
 
-  const suffix = SEAT_TO_SUFFIX[seat];
-  if (!suffix)
-    return err(res, 3003, 'VAL_OUT_OF_RANGE',
-      `Unknown seat '${seat}'. Valid: ${Object.keys(SEAT_TO_SUFFIX).join(', ')}`, 422);
+  const weightKg = Number(weight);
+  const heightCm = Number(height);
+  if (!Number.isFinite(weightKg) || weightKg <= 0)
+    return err(res, 3003, 'VAL_OUT_OF_RANGE', 'weight must be a positive number', 422);
+  if (!Number.isFinite(heightCm) || heightCm <= 0)
+    return err(res, 3003, 'VAL_OUT_OF_RANGE', 'height must be a positive number', 422);
 
-  if (!VALID_SEAT_BELTS.includes(seat_belt))
-    return err(res, 3003, 'VAL_OUT_OF_RANGE',
-      `Unknown seat_belt '${seat_belt}'. Valid: ${VALID_SEAT_BELTS.join(', ')}`, 422);
+  const seatKey = String(seat || 'fl').toLowerCase();
+  if (!SEAT_SIGNAL_MAP[seatKey])
+    return err(res, 3003, 'VAL_OUT_OF_RANGE', `Unknown seat '${seat}'. Valid: fl, fr`, 422);
 
-  if (!VALID_CRASH_PULSES.includes(crash_pulse))
-    return err(res, 3003, 'VAL_OUT_OF_RANGE',
-      `Unknown crash_pulse '${crash_pulse}'. Valid: ${VALID_CRASH_PULSES.join(', ')}`, 422);
+  const seatbelt = String(seatbelt_system || '').trim().toUpperCase();
+  if (!VALID_SEATBELT_SYSTEMS.includes(seatbelt))
+    return err(res, 3003, 'VAL_OUT_OF_RANGE', `Unknown seatbelt_system '${seatbelt_system}'. Valid: ${VALID_SEATBELT_SYSTEMS.join(', ')}`, 422);
 
-  // Read live signal values for this seat
-  const weightSig  = signalValues[`OMS_${suffix}_OccupantWeightMean_kg`];
-  const posXSig    = signalValues[`SPS_${suffix}_SeatDirectionX`];
-  const injurySig  = signalValues[`ARS_${suffix}_InjuryRiskAdaptive`];
+  const velocityKmh = resolveVelocityFromCrashSeverity(crash_severity);
+  if (!velocityKmh)
+    return err(res, 3003, 'VAL_OUT_OF_RANGE', `Unknown crash_severity '${crash_severity}'. Valid: ${VALID_VELOCITIES.join(', ')} or ${Object.keys(OLC_TO_VELOCITY).join(', ')}`, 422);
 
-  const weight  = weightSig  ? Math.round(weightSig.value)  : 56;   // default 50th-pct
-  const posX    = posXSig    ? posXSig.value                : 2047;  // default mid
-  const injRisk = injurySig  ? injurySig.value              : 50;
+  const seatSignals = SEAT_SIGNAL_MAP[seatKey];
+  const canOccRaw = signalValues[seatSignals.occClass]?.value;
+  const canOopRaw = signalValues[seatSignals.oop]?.value;
+  const canSeatXRaw = signalValues[seatSignals.seatX]?.value;
 
-  // Percentile classification from occupant weight (kg)
-  const percentile    = weight <= 50 ? 5 : weight <= 80 ? 50 : 95;
+  const seatXParam = seat_x_mm === undefined ? null : Number(seat_x_mm);
+  if (seat_x_mm !== undefined && !Number.isFinite(seatXParam))
+    return err(res, 3003, 'VAL_OUT_OF_RANGE', 'seat_x_mm must be a number', 422);
 
-  // Seat fore-aft position from SPS_SeatDirectionX (0–4095 mm range)
-  const seat_position = posX < 1365 ? 'fwd' : posX < 2730 ? 'mid' : 'bwd';
+  let seatXmm = null;
+  let seatXSource = 'default';
+  if (seatXParam !== null) {
+    seatXmm = seatXParam;
+    seatXSource = 'hmi_param';
+  } else if (Number.isFinite(canSeatXRaw)) {
+    seatXmm = Number(canSeatXRaw);
+    seatXSource = 'can_signal';
+  }
 
-  // Score 0.0–5.0 derived from ARS injury risk (0–100 → 0.0–5.0)
-  const score = parseFloat((injRisk / 20).toFixed(1));
+  const derivedPercentile = derivePercentileFromWeight(weightKg);
+  const canPercentile = resolvePercentileFromCan(canOccRaw);
+  const effectivePercentile = canPercentile ?? derivedPercentile;
+  const seatPositionZone = resolveSeatPositionZone(seatXmm);
 
-  const filename = `${percentile}p_${seat_position}_${weight}_${seat_belt}.mp4`;
+  const expected = {
+    seatbelt,
+    percentile: effectivePercentile,
+    seatPosition: seatPositionZone,
+    velocityKmh,
+  };
 
-  res.json({
+  const candidates = listRestraintsCandidates();
+  const scored = candidates
+    .map(c => ({ ...c, score: scoreCandidate(c, expected) }))
+    .sort((a, b) => b.score - a.score);
+  const best = scored[0] || null;
+
+  const context = {
+    weight_kg: Number(weightKg.toFixed(3)),
+    height_cm: Number(heightCm.toFixed(3)),
+    derived_percentile: derivedPercentile,
+    effective_percentile: effectivePercentile,
+    can_percentile: canPercentile,
+    target_velocity_kmh: velocityKmh,
+    seatbelt_system: seatbelt,
+    seat: seatKey,
+    seat_x_mm: seatXmm,
+    seat_x_source: seatXSource,
+    seat_position_zone: seatPositionZone,
+    out_of_position: Number(canOopRaw || 0) !== 0,
+    candidates_found: candidates.length,
+  };
+
+  if (!best) {
+    return res.json({
+      matched: false,
+      video: null,
+      score: 0,
+      context,
+    });
+  }
+
+  return res.json({
     matched: true,
+    score: best.score,
     video: {
-      filename,
-      percentile,
-      seat_position,
-      weight,
-      seat_belt,
-      url: `/api/restraints/video/${filename}`,
+      filename: best.filename,
+      percentile: best.percentile,
+      seat_position: best.seat_position,
+      velocity_kmh: best.velocity_kmh,
+      seatbelt: best.seatbelt,
+      url: `/api/restraints/video/${encodeURIComponent(best.filename)}`,
     },
-    score,
+    context,
   });
+});
+
+app.get('/api/restraints/video/:filename', (req, res) => {
+  const filename = String(req.params.filename || '');
+  if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+    return err(res, 3003, 'VAL_OUT_OF_RANGE', 'invalid filename', 400);
+  }
+
+  const mediaPath = path.resolve(RESTRAINTS_MEDIA_DIR);
+  const targetPath = path.resolve(path.join(mediaPath, filename));
+  if (!targetPath.startsWith(mediaPath + path.sep)) {
+    return err(res, 3003, 'VAL_OUT_OF_RANGE', 'invalid filename', 400);
+  }
+  if (!fs.existsSync(targetPath) || !fs.statSync(targetPath).isFile()) {
+    return err(res, 3004, 'VAL_NOT_FOUND', 'video file not found', 404);
+  }
+
+  return res.sendFile(targetPath);
 });
 
 // Static: serve everything after API routes

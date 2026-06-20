@@ -68,6 +68,10 @@ POST   /signals/batch_update      — batch write writable signals → 202 + WS 
 
 # Realtime
 WS     /ws/signals                — real-time signal stream (500ms, per-client subscription)
+
+# Restraints
+GET    /api/restraints/match      — match best restraint video by query (weight/height/crash_severity/seatbelt_system/seat/seat_x_mm)
+GET    /api/restraints/video/:filename — stream matched video file from media/
 ```
 
 > **Signal Alias (`std_name`):** Mọi API endpoint (REST write, batch update, WebSocket subscribe/unsubscribe) đều chấp nhận cả `name` (signal_name gốc trong CAN DB) **và** `std_name` (tên chuẩn hóa từ `data/signal_std_name.json`). Response luôn trả về cả hai trường `name` + `std_name` trong payload signal.

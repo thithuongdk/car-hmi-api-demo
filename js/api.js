@@ -5,8 +5,22 @@
  */
 
 const RealAPI = (() => {
-  // Build base URL from current browser origin (works on any domain/port)
-  const _base = location.origin;
+  function _resolveBaseUrl() {
+    const fromQuery = new URLSearchParams(location.search).get('api_base');
+    const fromStorage = localStorage.getItem('car_hmi_api_base');
+    const fromWindow = window.CAR_HMI_API_BASE;
+    const raw = fromQuery || fromWindow || fromStorage;
+    if (!raw) return location.origin;
+    try {
+      return new URL(raw, location.origin).origin;
+    } catch (_) {
+      return location.origin;
+    }
+  }
+
+  // Optional override via ?api_base=... or localStorage['car_hmi_api_base']
+  const _base = _resolveBaseUrl();
+  window.__CAR_HMI_API_BASE = _base;
 
   async function _req(method, path, body) {
     const opts = {
@@ -69,8 +83,17 @@ const RealAPI = (() => {
     getInfo()  { return _req('GET', '/api/info'); },
 
     // ── Restraints ────────────────────────────────────────────────────────────
-    matchRestraints({ seat, seat_belt, crash_pulse = 'OLC18' } = {}) {
-      const params = new URLSearchParams({ seat, seat_belt, crash_pulse });
+    matchRestraints({ weight, height, crash_severity, seatbelt_system, seat = 'fl', seat_x_mm } = {}) {
+      const params = new URLSearchParams({
+        weight: String(weight ?? ''),
+        height: String(height ?? ''),
+        crash_severity: String(crash_severity ?? ''),
+        seatbelt_system: String(seatbelt_system ?? ''),
+        seat: String(seat ?? 'fl'),
+      });
+      if (seat_x_mm !== undefined && seat_x_mm !== null && seat_x_mm !== '') {
+        params.set('seat_x_mm', String(seat_x_mm));
+      }
       return _req('GET', `/api/restraints/match?${params}`);
     },
   };

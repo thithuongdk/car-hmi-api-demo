@@ -19,7 +19,38 @@ const App = {
 // On Vercel (static-only deploy) server.js is NOT running → treat as mock.
 // Detection: try GET /api/signals with a short timeout; if it responds → real server.
 let _onRealServer = false;
+function _apiBase() {
+  return window.__CAR_HMI_API_BASE || location.origin;
+}
+
+function _wsBase() {
+  const base = _apiBase();
+  try {
+    const u = new URL(base);
+    u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+    return u.origin;
+  } catch (_) {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${proto}//${location.host}`;
+  }
+}
+
 async function _detectServer() {
+  const forcedBase = new URLSearchParams(location.search).get('api_base')
+    || window.CAR_HMI_API_BASE
+    || localStorage.getItem('car_hmi_api_base');
+  if (forcedBase) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 3000);
+      const res = await fetch(`${_apiBase()}/signals`, { signal: ctrl.signal });
+      clearTimeout(timer);
+      return res.ok || res.status < 500;
+    } catch (_) {
+      return false;
+    }
+  }
+
   const isNonLocal = (
     typeof location !== 'undefined' &&
     !['localhost', '127.0.0.1', ''].includes(location.hostname) &&
@@ -29,7 +60,7 @@ async function _detectServer() {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 2000);
-    const res = await fetch('/api/signals', { signal: ctrl.signal });
+    const res = await fetch(`${_apiBase()}/signals`, { signal: ctrl.signal });
     clearTimeout(timer);
     return res.ok || res.status < 500; // 200/404 means server running; timeout/network error means static
   } catch (_) {
@@ -124,8 +155,7 @@ function _connectWS() {
 
   let ws;
   if (_onRealServer) {
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${proto}//${location.host}/ws/signals`);
+    ws = new WebSocket(`${_wsBase()}/ws/signals`);
   } else {
     ws = new MockWebSocket('ws://localhost:8000/ws/signals');
   }
@@ -137,7 +167,7 @@ function _connectWS() {
   ws.onopen = () => {
     App._wsBadge.textContent = "● WS Connected";
     App._wsBadge.className = "badge badge--ok";
-    if (_onRealServer) Log.ws('CONNECTED', location.host + '/ws/signals');
+    if (_onRealServer) Log.ws('CONNECTED', _wsBase().replace(/^wss?:\/\//, '') + '/ws/signals');
     // Subscribe to active profile signals (all in dev mode)
     const sigs = App.mode === 'dev' ? '*' : (App.activeProfile?.signals || '*');
     _wsSubscribe(sigs);
@@ -781,50 +811,97 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function _doRestraintsMatch() {
-  const seat      = document.getElementById("rst-seat").value;
-  const seat_belt = document.querySelector("input[name='rst-belt']:checked")?.value;
-  const crash_pulse = document.querySelector("input[name='rst-pulse']:checked")?.value || "OLC18";
+  const weight = parseFloat(document.getElementById("rst-weight").value);
+  const height = parseFloat(document.getElementById("rst-height").value);
+  const crash_severity = document.getElementById("rst-crash-severity").value;
+  const seat = document.getElementById("rst-seat").value;
+  const seatbelt_system = document.querySelector("input[name='rst-belt']:checked")?.value;
+  const seatXRaw = document.getElementById("rst-seat-x").value.trim();
+  const seat_x_mm = seatXRaw === "" ? undefined : parseFloat(seatXRaw);
 
   const result = document.getElementById("rst-result");
   result.innerHTML = `<p style="color:var(--muted);font-size:12px">Matching…</p>`;
 
   try {
-    const res = await API.matchRestraints({ seat, seat_belt, crash_pulse });
-    _renderRestraintsResult(result, res, { seat, seat_belt, crash_pulse });
+    const res = await API.matchRestraints({
+      weight,
+      height,
+      crash_severity,
+      seatbelt_system,
+      seat,
+      seat_x_mm,
+    });
+    _renderRestraintsResult(result, res, {
+      weight,
+      height,
+      crash_severity,
+      seatbelt_system,
+      seat,
+      seat_x_mm,
+    });
   } catch (e) {
     result.innerHTML = `<p style="color:var(--crit);font-size:12px">Error: ${_escHtml(e.message)}</p>`;
   }
 }
 
+function _resolveApiUrl(pathOrUrl) {
+  if (!pathOrUrl) return "";
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  const base = window.__CAR_HMI_API_BASE || location.origin;
+  try {
+    return new URL(pathOrUrl, base).toString();
+  } catch (_) {
+    return pathOrUrl;
+  }
+}
+
 function _renderRestraintsResult(container, res, params) {
-  const scoreColor = res.score >= 4 ? 'var(--crit)' : res.score >= 2.5 ? 'var(--warn)' : 'var(--ok)';
+  if (!res.matched || !res.video) {
+    const context = res.context || {};
+    container.innerHTML = `
+      <div class="rst-result-card">
+        <span class="badge badge--dis" style="font-size:12px">✗ No match</span>
+        <div style="margin-top:8px;color:var(--muted);font-size:12px">
+          Không tìm thấy video phù hợp trong thư mục media/. Candidates: ${context.candidates_found ?? 0}
+        </div>
+      </div>`;
+    return;
+  }
+
+  const videoUrl = _resolveApiUrl(res.video.url);
+  const scoreColor = res.score >= 5.5 ? 'var(--ok)' : res.score >= 4 ? 'var(--warn)' : 'var(--crit)';
+  const ctx = res.context || {};
   container.innerHTML = `
     <div class="rst-result-card">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <span class="badge ${res.matched ? 'badge--ok' : 'badge--dis'}" style="font-size:12px">
-          ${res.matched ? '✓ Matched' : '✗ No match'}
+        <span class="badge badge--ok" style="font-size:12px">
+          ✓ Matched
         </span>
         <div style="display:flex;flex-direction:column;align-items:center">
           <span style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em">Score</span>
-          <span class="rst-score" style="color:${scoreColor}">${res.score.toFixed(1)}</span>
+          <span class="rst-score" style="color:${scoreColor}">${Number(res.score).toFixed(3)}</span>
         </div>
       </div>
 
       <div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:4px">VIDEO FILE</div>
         <div class="rst-filename">${_escHtml(res.video.filename)}</div>
-        <a href="${_escHtml(res.video.url)}" class="btn btn-sm" style="margin-top:6px;display:inline-block" target="_blank">
+        <a href="${_escHtml(videoUrl)}" class="btn btn-sm" style="margin-top:6px;display:inline-block" target="_blank">
           ▶ Open URL
         </a>
+        <video controls preload="metadata" style="display:block;margin-top:8px;max-width:100%;border-radius:8px;background:#000" src="${_escHtml(videoUrl)}"></video>
       </div>
 
       <div class="rst-meta-grid">
-        <span class="k">Seat</span>        <span class="v">${_escHtml(params.seat)}</span>
-        <span class="k">Seat belt</span>   <span class="v">${_escHtml(res.video.seat_belt)}</span>
-        <span class="k">Crash pulse</span> <span class="v">${_escHtml(params.crash_pulse)}</span>
-        <span class="k">Percentile</span>  <span class="v">${res.video.percentile}th</span>
-        <span class="k">Seat position</span><span class="v">${res.video.seat_position}</span>
-        <span class="k">Weight</span>      <span class="v">${res.video.weight} kg</span>
+        <span class="k">Seat</span>            <span class="v">${_escHtml(params.seat)}</span>
+        <span class="k">Seatbelt system</span> <span class="v">${_escHtml(res.video.seatbelt)}</span>
+        <span class="k">Crash severity</span>  <span class="v">${_escHtml(params.crash_severity)}</span>
+        <span class="k">Velocity</span>        <span class="v">${res.video.velocity_kmh} km/h</span>
+        <span class="k">Percentile</span>      <span class="v">${res.video.percentile}th</span>
+        <span class="k">Seat position</span>   <span class="v">${_escHtml(res.video.seat_position)}</span>
+        <span class="k">Derived percentile</span><span class="v">${ctx.derived_percentile ?? '-'}</span>
+        <span class="k">Effective percentile</span><span class="v">${ctx.effective_percentile ?? '-'}</span>
+        <span class="k">Seat X source</span>   <span class="v">${_escHtml(ctx.seat_x_source || '-')}</span>
       </div>
     </div>`;
 }

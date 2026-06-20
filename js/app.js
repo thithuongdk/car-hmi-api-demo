@@ -20,8 +20,12 @@ const App = {
 // Detection: try GET /api/signals with a short timeout; if it responds → real server.
 let _onRealServer = false;
 function _apiBase() {
-  return window.__CAR_HMI_API_BASE || location.origin;
+  return new URLSearchParams(location.search).get('api_base')
+    || window.CAR_HMI_API_BASE
+    || localStorage.getItem('car_hmi_api_base')
+    || location.origin;
 }
+``
 
 function _wsBase() {
   const base = _apiBase();

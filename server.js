@@ -365,21 +365,31 @@ app.post('/signals/batch_update', (req, res) => {
   const { signals: items } = req.body || {};
   if (!Array.isArray(items) || items.length === 0)
     return err(res, 3002, 'VAL_MISSING_FIELD', 'signals array required', 400);
-  const results = [];
+  const queued = [];
+  const errors = [];
   for (const item of items) {
     const ref = item?.name ?? item?.signal_name ?? item?.std_name;
     const value = item?.value;
     const meta = resolveSignalMeta(ref);
-    if (!meta)          { results.push({ name: ref, std_name: ref, value, status: 'not_found' }); continue; }
-    if (!meta.writable) { results.push({ name: meta.name, std_name: meta.std_name || meta.name, value, status: 'not_writable' }); continue; }
+    if (!meta) {
+      errors.push({ signal_name: ref, value, error: 'not_found' });
+      continue;
+    }
+    if (!meta.writable) {
+      errors.push({ signal_name: meta.name, value, error: 'not_writable' });
+      continue;
+    }
     const v = typeof value === 'number' ? value : parseFloat(value);
-    if (isNaN(v) || v < meta.min || v > meta.max) { results.push({ name: meta.name, std_name: meta.std_name || meta.name, value, status: 'out_of_range' }); continue; }
+    if (isNaN(v) || v < meta.min || v > meta.max) {
+      errors.push({ signal_name: meta.name, value, error: 'out_of_range' });
+      continue;
+    }
     signalValues[meta.name] = { value: v, timestamp: Date.now() / 1000 };
-    results.push({ name: meta.name, std_name: meta.std_name || meta.name, value: v, status: 'ok' });
+    queued.push({ signal_name: meta.name, value: v });
   }
   // push all successful writes to subscribed WS clients
-  broadcastWrite(results.filter(r => r.status === 'ok').map(r => ({ name: r.name, value: r.value })));
-  res.status(202).json({ timestamp: new Date().toISOString(), results });
+  broadcastWrite(queued.map(r => ({ name: r.signal_name, value: r.value })));
+  res.status(202).json({ queued, count: queued.length, queued_at: Date.now() / 1000, errors });
 });
 
 // ── REST: Restraints ──────────────────────────────────────────────────────────

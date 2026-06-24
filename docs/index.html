@@ -327,10 +327,9 @@ window.onload = function () {
               "application/json": {
                 schema: { $ref: "#/components/schemas/BatchSignalWrite" },
                 example: {
-                  timestamp: "2024-06-01T12:00:00Z",
-                  updates: [
-                    { name: "ACR_FL_RetractRequest", value: 2 },
-                    { name: "ACR_FR_RetractRequest", value: 2 }
+                  signals: [
+                    { signal_name: "EngineSpeed", value: 3500 },
+                    { signal_name: "CoolantTemp", value: 90 }
                   ]
                 }
               }
@@ -342,11 +341,11 @@ window.onload = function () {
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/BatchSignalWriteAccepted" },
-                  example: { status: "queued", count: 2, results: [ { name: "ACR_FL_RetractRequest", std_name: "ACR_FL_RetractRequest", value: 2, status: "ok" }, { name: "ARS_FL_InjuryRiskAdaptive", std_name: "ARS_FL_InjuryRiskAdaptive", value: 1, status: "not_writable" } ] }
+                  example: { queued: [ { signal_name: "EngineSpeed", value: 3500.0 }, { signal_name: "CoolantTemp", value: 90.0 } ], count: 2, queued_at: 1716451200.789, errors: [] }
                 }
               }
             },
-            "400": { description: "Bad Request — missing `updates` field or invalid format", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
+            "400": { description: "Bad Request — missing `signals` field or invalid format", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
           }
         }
       },
@@ -611,16 +610,15 @@ window.onload = function () {
         },
         BatchSignalWrite: {
           type: "object",
-          required: ["updates"],
+          required: ["signals"],
           properties: {
-            timestamp: { type: "string", format: "date-time" },
-            updates: {
+            signals: {
               type: "array",
               items: {
                 type: "object",
                 properties: {
-                  name:  { type: "string", example: "ACR_FL_RetractRequest" },
-                  value: { type: "number", example: 2 }
+                  signal_name: { type: "string", example: "ACR_FL_RetractRequest" },
+                  value:       { type: "number", example: 2 }
                 }
               }
             }
@@ -647,15 +645,21 @@ window.onload = function () {
         BatchSignalWriteAccepted: {
           type: "object",
           properties: {
-            status:  { type: "string",  example: "queued" },
-            count:   { type: "integer", example: 2 },
-            results: { type: "array", items: {
+            queued: { type: "array", items: {
               type: "object",
               properties: {
-                name:     { type: "string", example: "ACR_FL_RetractRequest" },
-                std_name: { type: "string", example: "ACR_FL_RetractRequest" },
-                value:    { type: "number", example: 2 },
-                status:   { type: "string", enum: ["ok","not_writable","not_found","out_of_range"], example: "ok" }
+                signal_name: { type: "string", example: "ACR_FL_RetractRequest" },
+                value:       { type: "number", example: 2 }
+              }
+            }},
+            count:     { type: "integer", example: 2 },
+            queued_at: { type: "number",  description: "Unix epoch seconds", example: 1716451200.789 },
+            errors:    { type: "array", items: {
+              type: "object",
+              properties: {
+                signal_name: { type: "string", example: "ARS_FL_InjuryRiskAdaptive" },
+                value:       { type: "number", example: 1 },
+                error:       { type: "string", enum: ["not_writable","not_found","out_of_range"], example: "not_writable" }
               }
             }}
           }

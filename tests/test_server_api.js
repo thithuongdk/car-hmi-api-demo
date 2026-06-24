@@ -310,17 +310,20 @@ async function runTests() {
 
   const batchRes = await request('POST', '/signals/batch_update', { signals: batchItems });
   ok('202 Accepted',                    batchRes.status === 202);
-  ok('has results array',               Array.isArray(batchRes.body?.results));
+  ok('has queued array',                Array.isArray(batchRes.body?.queued));
+  ok('count matches queued length',     batchRes.body?.count === batchRes.body?.queued?.length);
+  ok('has queued_at',                   typeof batchRes.body?.queued_at === 'number');
+  ok('has errors array',                Array.isArray(batchRes.body?.errors));
   if (aWritable) {
-    const okItem = batchRes.body.results.find(r => r.name === aWritable.name);
-    ok('writable signal status = ok',    okItem?.status === 'ok');
+    const okItem = batchRes.body.queued.find(r => r.signal_name === aWritable.name);
+    ok('writable signal queued',         okItem?.signal_name === aWritable.name);
   }
   if (aNonWritable) {
-    const denyItem = batchRes.body.results.find(r => r.name === aNonWritable.name);
-    ok('non-writable status = not_writable', denyItem?.status === 'not_writable');
+    const denyItem = batchRes.body.errors.find(r => r.signal_name === aNonWritable.name);
+    ok('non-writable in errors',         denyItem?.error === 'not_writable');
   }
-  const missingItem = batchRes.body.results.find(r => r.name === '__NOEXIST__');
-  ok('non-existent status = not_found', missingItem?.status === 'not_found');
+  const missingItem = batchRes.body.errors.find(r => r.signal_name === '__NOEXIST__');
+  ok('non-existent in errors',          missingItem?.error === 'not_found');
 
   // ── GET /api/restraints/match ─────────────────────────────────────────────
   console.log('\n━━━ GET /api/restraints/match ─────────────────────────────────');

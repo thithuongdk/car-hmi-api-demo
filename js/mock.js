@@ -503,22 +503,27 @@ const MockAPI = {
   async batchUpdateSignals(signals) {
     await delay();
     const d = Store.get();
-    const results = [];
+    const queued = [];
+    const errors = [];
     for (const item of signals) {
       const ref = item?.name ?? item?.signal_name ?? item?.std_name;
       const value = item?.value;
       const meta = _resolveSignalMeta(ref);
       if (meta && meta.writable) {
         const v = typeof value === "number" ? value : parseFloat(value);
-        d.signal_values[meta.name] = { value: v, timestamp: Date.now() / 1000 };
-        results.push({ name: meta.name, std_name: meta.std_name || meta.name, value: v, status: "ok" });
+        if (!isNaN(v) && v >= meta.min && v <= meta.max) {
+          d.signal_values[meta.name] = { value: v, timestamp: Date.now() / 1000 };
+          queued.push({ signal_name: meta.name, value: v });
+        } else {
+          errors.push({ signal_name: meta.name, value, error: "out_of_range" });
+        }
       } else {
-        results.push({ name: ref, std_name: ref, value, status: meta ? "not_writable" : "not_found" });
+        errors.push({ signal_name: meta ? meta.name : ref, value, error: meta ? "not_writable" : "not_found" });
       }
     }
     Store.save();
-    const req = { timestamp: new Date().toISOString(), signals };
-    const res = { timestamp: new Date().toISOString(), results };
+    const req = { signals };
+    const res = { queued, count: queued.length, queued_at: Date.now() / 1000, errors };
     Log.api("POST", "/signals/batch_update", req, res, 202);
     return res;
   },

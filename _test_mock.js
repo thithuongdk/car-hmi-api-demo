@@ -150,10 +150,13 @@ function ok(label, val) {
     { name: rxName, value: 99 },
     { name: '__no_exist__', value: 0 },
   ]);
-  ok('has results array',           Array.isArray(b.results));
-  ok('TX result ok',                b.results.find(r=>r.name===txName)?.status === 'ok');
-  ok('non-TX result not_writable',  b.results.find(r=>r.name===rxName)?.status === 'not_writable');
-  ok('missing result not_found',    b.results.find(r=>r.name==='__no_exist__')?.status === 'not_found');
+  ok('has queued array',            Array.isArray(b.queued));
+  ok('count matches queued',        b.count === b.queued.length);
+  ok('has queued_at',               typeof b.queued_at === 'number');
+  ok('has errors array',            Array.isArray(b.errors));
+  ok('TX result queued',            b.queued.find(r=>r.signal_name===txName)?.signal_name === txName);
+  ok('non-TX in errors',            b.errors.find(r=>r.signal_name===rxName)?.error === 'not_writable');
+  ok('missing in errors',           b.errors.find(r=>r.signal_name==='__no_exist__')?.error === 'not_found');
 
   console.log('\n=== GET /api/info ===');
   const info = await MockAPI.getInfo();

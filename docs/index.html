@@ -61,7 +61,7 @@ window.onload = function () {
     openapi: "3.0.3",
     info: {
       title: "CAN-HMI REST API",
-      description: "REST + WebSocket API contract for the Car HMI demo.\n\n**WebSocket realtime stream:** `wss://car-hmi-api-demo.onrender.com/ws/signals` — see [WebSocket Docs](/ws).\n\n**Signal Alias (`std_name`):** Mọi REST write, batch update, và WebSocket subscribe/unsubscribe đều chấp nhận cả `name` (signal_name gốc trong CAN DB) **và** `std_name` (tên chuẩn hóa từ `data/signal_std_name.json`). Response signals trả về cặp canonical + std_name (`signal_name` trong REST snapshot, `name` trong WS frame).\n\n**Subscribe to signals after connect:**\n```\n{ type: 'subscribe', signals: ['ACR_FL_RetractRequest', 'OMS_FL_HandsOnWheel'] }\n← { type: 'subscribed', signals: [...], count: 2 }  + snapshot\n\n{ type: 'subscribe', signals: '*' }   // all 167 signals\n{ type: 'subscribe', signals: ['OMS_FL_OccupantWeightMean', 'OMS_RL1_SeatbeltMisuse'] }  // bằng std_name\n{ type: 'ping' }  →  { type: 'pong' }\n```\n\n**Cross-tab write broadcast:** REST writes (`PUT /signals/:name`, `POST /signals/batch_update`) are immediately pushed to all subscribed WS clients.\n\n---\n\n### HTTP Status Codes\n\n| HTTP | App Code | ID | Description |\n|------|----------|----|-------------|\n| `200 OK` | - | - | Success |\n| `201 Created` | - | - | Profile created (POST /api/profile) |\n| `202 Accepted` | - | - | Signal write queued for CAN |\n| `204 No Content` | - | - | DELETE successful |\n| `400 Bad Request` | `3001` `3002` | VAL_INVALID_JSON / VAL_MISSING_FIELD | Invalid JSON / missing field |\n| `401 Unauthorized` | `4001` | SEC_UNAUTHORIZED | Invalid API key |\n| `403 Forbidden` | `4002` `4004` | SAFE_WRITE_DENIED / SAFE_VEHICLE_MOVING | Signal read-only / vehicle moving |\n| `404 Not Found` | `3004` | VAL_NOT_FOUND | Resource not found |\n| `409 Conflict` | `3005` | VAL_CONFLICT | Duplicate name / section_id mismatch |\n| `422 Unprocessable` | `3003` | VAL_OUT_OF_RANGE | Value outside [min, max] |\n| `500 Server Error` | `1000` `4003` | SYS_UNKNOWN / SAFE_WATCHDOG_TRIP | Internal server error |\n| `503 Unavailable` | `1001` `2001` | SYS_DB_LOCKED / HW_CAN_0_ERROR | DB locked / hardware error |\n| `504 Timeout` | `2002` | HW_CAN_1_ERROR | CAN1 bus communication timeout |\n\nSee full reference at **[Error Codes Reference](/docs/errors)**.\n\n---\n\n### section_id (Optimistic Locking)\nEvery PUT request must include `section_id` matching the current server value.\nIf mismatched → **409 / VAL_CONFLICT** → client must GET again and retry.",
+      description: "REST + WebSocket API contract for the Car HMI demo.\n\n**WebSocket realtime stream:** `wss://car-hmi-api-demo.onrender.com/ws/signals` — see [WebSocket Docs](/ws).\n\n**Signal alias (`std_name`):** REST write endpoints and WebSocket subscriptions accept canonical `name` and standardized `std_name`.\n\n**Subscribe after connect:**\n```\n{ type: 'subscribe', signals: ['HMI_CrashSeverity'] }\n{ type: 'subscribe', signals: ['*'] }\n{ type: 'ping' }  ->  { type: 'pong' }\n```\n\n**Write broadcast:** successful writes from `PUT /signals/{signal_name}` and `POST /signals/batch_update` are pushed to WebSocket subscribers.\n\n**Profile scope:** `/signals` and `/signals/available` are filtered by active profile unless `X-Dev-Mode: true` is set.",
       version: "1.0.0",
       contact: { url: "https://car-hmi-api-demo.onrender.com" }
     },
@@ -80,8 +80,8 @@ window.onload = function () {
       "/api/info": {
         get: {
           tags: ["System"],
-          summary: "Get project & system information",
-          description: "Returns read-only metadata: project version, server config, hardware settings, storage and safety thresholds. Sensitive fields (api_key) are redacted.",
+          summary: "Get runtime system information",
+          description: "Returns live API runtime status and counters.",
           operationId: "getInfo",
           responses: {
             "200": {
@@ -90,16 +90,17 @@ window.onload = function () {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/SystemInfo" },
                   example: {
-                    project: { name: "CarPC HMI System", version: "1.2.0", environment: "development" },
-                    server: { host: "0.0.0.0", port: 8000, api_key: "[REDACTED]", cors_origins: ["http://localhost:3000"], websocket: { endpoint: "/ws/signals", broadcast_interval_ms: 100 } },
-                    hardware: { can_bus: { interface: "vcan0", bitrate: 500000, retry_limit: 3, rate_limit_ms: 100 } },
-                    storage: { log_level: "DEBUG", retention_days: 30 },
-                    safety: { speed_limit_max: 200, temp_threshold_critical: 105, write_access_enabled: true }
+                    name: "CAN-HMI Signal API",
+                    version: "1.0.0",
+                    description: "Real-time CAN bus signal monitoring and control API",
+                    uptime_seconds: 1234.5,
+                    bus_connected: true,
+                    db_connected: true,
+                    signal_count: 236
                   }
                 }
               }
-            },
-            "503": { description: "Service Unavailable - info not loaded yet", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
+            }
           }
         }
       },
@@ -167,7 +168,7 @@ window.onload = function () {
         put: {
           tags: ["Profiles"],
           summary: "Update profile (optimistic lock)",
-          description: "Requires `section_id` matching the current server value.",
+          description: "Optional optimistic lock: if section_id is provided it must match the current server value.",
           operationId: "updateProfile",
           requestBody: {
             required: true,
@@ -201,7 +202,7 @@ window.onload = function () {
       "/configs": {
         get: {
           tags: ["Config"],
-          summary: "Get full system info (Dev mode)",
+          summary: "Get merged project/config payload",
           operationId: "getConfigs",
           responses: {
             "200": {
@@ -210,10 +211,14 @@ window.onload = function () {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/ConfigsResponse" },
                   example: {
-                    section_id: 123,
-                    configs: [
-                      { config_name: "high_load", sampling_rate: 100, RTSP_url: "rtsp://example.com/stream", WebRTC_url: "", db_file: ["~/zf.dbc","~/mec.dbc"], selected: true },
-                      { config_name: "low_load",  sampling_rate: 10,  RTSP_url: "", WebRTC_url: "", db_file: [], selected: false }
+                    section_id: 12,
+                    project: { name: "CarPC HMI System", version: "1.2.0" },
+                    hardware: { can_bus: { can0: { channel: "can0", bitrate: 500000 } } },
+                    server: { api_key: "[REDACTED]" },
+                    storage: { retention_days: 30 },
+                    safety: { write_access_enabled: true },
+                    profiles: [
+                      { profile_name: "U0", selected: true, signals: ["HMI_CrashSeverity"] }
                     ]
                   }
                 }
@@ -225,7 +230,7 @@ window.onload = function () {
       "/config": {
         get: {
           tags: ["Config"],
-          summary: "Get editable config (Dev mode)",
+          summary: "Get runtime config snapshot",
           operationId: "getConfig",
           responses: {
             "200": {
@@ -233,7 +238,13 @@ window.onload = function () {
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/ConfigResponse" },
-                  example: { section_id: 123, config_name: "high_load", sampling_rate: 100, RTSP_url: "rtsp://example.com/stream", WebRTC_url: "", db_file: ["~/zf.dbc","~/mec.dbc"], selected: true }
+                  example: {
+                    section_id: 12,
+                    can_db: { path: "data/can0.json" },
+                    hardware: { can_bus: { can0: { channel: "can0", bitrate: 500000 } } },
+                    storage: { retention_days: 30 },
+                    safety: { write_access_enabled: true }
+                  }
                 }
               }
             }
@@ -241,29 +252,33 @@ window.onload = function () {
         },
         put: {
           tags: ["Config"],
-          summary: "Update editable config (optimistic lock, Dev mode)",
-          description: "Requires `section_id` matching the current server value.",
+          summary: "Update runtime config sections (optimistic lock)",
+          description: "Requires section_id matching the current server value.",
           operationId: "updateConfig",
           requestBody: {
             required: true,
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ConfigUpdate" },
-                example: { section_id: 123, config_name: "high_load", sampling_rate: 50, RTSP_url: "rtsp://example.com/stream", WebRTC_url: "", db_file: ["~/zf.dbc"], selected: true }
+                example: {
+                  section_id: 12,
+                  storage: { retention_days: 31 },
+                  safety: { write_access_enabled: false }
+                }
               }
             }
           },
           responses: {
-            "200": { description: "Updated", content: { "application/json": { schema: { $ref: "#/components/schemas/ConfigResponse" } } } },
-            "409": { description: "section_id mismatch", content: { "application/json": { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+            "202": { description: "Accepted", content: { "application/json": { schema: { $ref: "#/components/schemas/ConfigResponse" } } } },
+            "409": { description: "section_id mismatch", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
           }
         }
       },
       "/signals": {
         get: {
           tags: ["Signals"],
-          summary: "Current snapshot of all signal values",
-          description: "One-time snapshot. Use for initial load; then use **WebSocket** `/ws/signals` for realtime updates. Each signal now includes `std_name` (standardized name alias from `signal_std_name.json`).",
+          summary: "Current signal snapshot (profile-scoped)",
+          description: "One-time snapshot for the active profile. Use WebSocket `/ws/signals` for realtime updates.",
           operationId: "getSignals",
           responses: {
             "200": {
@@ -290,8 +305,8 @@ window.onload = function () {
       "/signals/available": {
         get: {
           tags: ["Signals"],
-          summary: "Full metadata for all signals",
-          description: "Returns full metadata: unit, min, max, writable flag, states enum, current value. Call **once** on app startup.",
+          summary: "Signal catalog with metadata (profile-scoped values)",
+          description: "Returns full signal metadata. Values outside profile scope are returned as null with warnings.",
           operationId: "getSignalsAvailable",
           responses: {
             "200": {
@@ -301,14 +316,10 @@ window.onload = function () {
                   schema: { $ref: "#/components/schemas/SignalsAvailableResponse" },
                   example: {
                     signals_info: [
-                      { name: "ARS_FL_InjuryRiskAdaptive",    std_name: "ARS_FL_InjuryRiskAdaptive",    unit: "",  min: 0, max: 100,  writable: false, description: "FL airbag injury risk adaptive",   states: [], value: 23  },
-                      { name: "OMS_FL_HandsOnWheel",          std_name: "OMS_FL_HandsOnWheel",          unit: "",  min: 0, max: 7,    writable: false, description: "FL occupant hands on wheel",       states: [{value:0,description:"No Hand"},{value:1,description:"One Hand"},{value:2,description:"Two Hands"},{value:3,description:"Hands Near"},{value:4,description:"Unknown"}], value: 3 },
-                      { name: "OMS_FL_OccupantWeightMean_kg", std_name: "OMS_FL_OccupantWeightMean",     unit: "",  min: 0, max: 255,  writable: false, description: "FL occupant weight mean (kg)",      states: [], value: 72  },
-                      { name: "SMA_VehicleStable",            std_name: "SMA_VehicleStable",            unit: "",  min: 0, max: 1,    writable: false, description: "Vehicle stability flag",           states: [], value: 1   },
-                      { name: "ACR_FL_RetractRequest",        std_name: "ACR_FL_RetractRequest",        unit: "",  min: 0, max: 255,  writable: true,  description: "FL ACR retract request",          states: [{value:0,description:"No Action"},{value:1,description:"Slack Removal"},{value:2,description:"Retract Level 1"},{value:3,description:"Retract Level 2"}], value: 0 },
-                      { name: "ACR_FR_RetractRequest",        std_name: "ACR_FR_RetractRequest",        unit: "",  min: 0, max: 255,  writable: true,  description: "FR ACR retract request",          states: [{value:0,description:"No Action"},{value:1,description:"Slack Removal"},{value:2,description:"Retract Level 1"},{value:3,description:"Retract Level 2"}], value: 0 },
-                      { name: "HMI_CrashSeverity",           std_name: "HMI_CrashSeverity",           unit: "",  min: 0, max: 7,    writable: true,  description: "HMI crash severity command",      states: [], value: 0   }
-                    ]
+                      { signal_name: "ARS_FL_InjuryRiskAdaptive", std_name: "ARS_FL_InjuryRiskAdaptive", unit: "", min_value: 0, max_value: 100, writable: false, states: [], group_name: null, widget_type: null, value: 23, status: "ok", timestamp: 1717243200.123 }
+                    ],
+                    total: 236,
+                    warnings: []
                   }
                 }
               }
@@ -351,6 +362,18 @@ window.onload = function () {
         }
       },
       "/signals/{signal_name}": {
+        get: {
+          tags: ["Signals"],
+          summary: "Get current value and metadata of one signal",
+          operationId: "getSignal",
+          parameters: [
+            { name: "signal_name", in: "path", required: true, schema: { type: "string" }, example: "HMI_CrashSeverity" }
+          ],
+          responses: {
+            "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SignalDetail" } } } },
+            "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
+          }
+        },
         put: {
           tags: ["Signals"],
           summary: "Write a value to a writable signal",
@@ -364,16 +387,13 @@ window.onload = function () {
           requestBody: {
             required: true,
             content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/SignalWrite" },
-                example: { timestamp: "2024-06-01T12:00:00Z", name: "ACR_FL_RetractRequest", value: 2 }
-              }
+              "application/json": { schema: { $ref: "#/components/schemas/SignalWrite" }, example: { value: 2 } }
             }
           },
           responses: {
             "202": { description: "Accepted - signal queued for CAN write", content: { "application/json": { schema: { $ref: "#/components/schemas/SignalWriteAccepted" }, example: { signal_name: "ACR_FL_RetractRequest", std_name: "ACR_FL_RetractRequest", value: 2, queued_at: 1717243200.123 } } } },
-            "403": { description: "Forbidden - signal is read-only (TX: false)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" }, example: { error: "Not writable" } } } },
-            "404": { description: "Signal not found",             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" }, example: { error: "Not found" } } } }
+            "403": { description: "Forbidden - signal is read-only (TX: false)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "404": { description: "Signal not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
           }
         }
       },
@@ -461,14 +481,14 @@ window.onload = function () {
       schemas: {
         SystemInfo: {
           type: "object",
-          description: "Project and system metadata. Sensitive fields are redacted.",
           properties: {
-            project:  { type: "object", properties: { name: { type: "string" }, version: { type: "string" }, environment: { type: "string" } } },
-            server:   { type: "object", properties: { host: { type: "string" }, port: { type: "integer" }, api_key: { type: "string", example: "[REDACTED]" }, cors_origins: { type: "array", items: { type: "string" } }, websocket: { type: "object", properties: { endpoint: { type: "string" }, broadcast_interval_ms: { type: "integer" } } } } },
-            hardware: { type: "object", properties: { can_bus: { type: "object", properties: { interface: { type: "string" }, bitrate: { type: "integer" }, retry_limit: { type: "integer" }, rate_limit_ms: { type: "integer" } } }, xcp: { type: "object" } } },
-            storage:  { type: "object", properties: { db_path: { type: "string" }, log_level: { type: "string" }, retention_days: { type: "integer" } } },
-            safety:   { type: "object", properties: { speed_limit_max: { type: "number" }, temp_threshold_critical: { type: "number" }, write_access_enabled: { type: "boolean" } } },
-            video:    { type: "object" }
+            name:           { type: "string", example: "CAN-HMI Signal API" },
+            version:        { type: "string", example: "1.0.0" },
+            description:    { type: "string" },
+            uptime_seconds: { type: "number", example: 1234.5 },
+            bus_connected:  { type: "boolean", example: true },
+            db_connected:   { type: "boolean", example: true },
+            signal_count:   { type: "integer", example: 236 }
           }
         },
         Profile: {
@@ -513,7 +533,7 @@ window.onload = function () {
         },
         ProfileUpdate: {
           type: "object",
-          required: ["section_id","name"],
+          required: ["name"],
           properties: {
             section_id:   { type: "string", description: "Must match the current profile section_id" },
             name:         { type: "string" },
@@ -524,32 +544,35 @@ window.onload = function () {
         },
         Config: {
           type: "object",
+          additionalProperties: true,
           properties: {
-            config_name:   { type: "string",  example: "high_load" },
-            sampling_rate: { type: "integer", description: "Samples per second", example: 100 },
-            RTSP_url:      { type: "string",  example: "rtsp://example.com/stream" },
-            WebRTC_url:    { type: "string",  example: "" },
-            db_file:       { type: "array", items: { type: "string" }, example: ["~/zf.dbc","~/mec.dbc"] },
-            selected:      { type: "boolean", example: true }
+            can_db:   { type: "object", additionalProperties: true },
+            hardware: { type: "object", additionalProperties: true },
+            storage:  { type: "object", additionalProperties: true },
+            safety:   { type: "object", additionalProperties: true }
           }
         },
         ConfigResponse: {
           type: "object",
           properties: {
-            section_id:    { type: "integer", example: 123 },
-            config_name:   { type: "string",  example: "high_load" },
-            sampling_rate: { type: "integer", example: 100 },
-            RTSP_url:      { type: "string",  example: "rtsp://example.com/stream" },
-            WebRTC_url:    { type: "string",  example: "" },
-            db_file:       { type: "array", items: { type: "string" }, example: ["~/zf.dbc"] },
-            selected:      { type: "boolean", example: true }
+            section_id:    { type: "integer", example: 12 },
+            can_db:        { type: "object", additionalProperties: true },
+            hardware:      { type: "object", additionalProperties: true },
+            storage:       { type: "object", additionalProperties: true },
+            safety:        { type: "object", additionalProperties: true }
           }
         },
         ConfigsResponse: {
           type: "object",
           properties: {
-            section_id: { type: "integer", example: 123 },
-            configs:    { type: "array",   items: { $ref: "#/components/schemas/Config" } }
+            section_id: { type: "integer", example: 12 },
+            project:    { type: "object", additionalProperties: true },
+            hardware:   { type: "object", additionalProperties: true },
+            server:     { type: "object", additionalProperties: true },
+            storage:    { type: "object", additionalProperties: true },
+            video:      { type: "object", additionalProperties: true },
+            safety:     { type: "object", additionalProperties: true },
+            profiles:   { type: "array", items: { type: "object", additionalProperties: true } }
           }
         },
         ConfigUpdate: {
@@ -557,12 +580,9 @@ window.onload = function () {
           required: ["section_id"],
           properties: {
             section_id:    { type: "integer", description: "Must match the current server section_id" },
-            config_name:   { type: "string" },
-            sampling_rate: { type: "integer" },
-            RTSP_url:      { type: "string" },
-            WebRTC_url:    { type: "string" },
-            db_file:       { type: "array", items: { type: "string" } },
-            selected:      { type: "boolean" }
+            hardware:      { type: "object", additionalProperties: true },
+            storage:       { type: "object", additionalProperties: true },
+            safety:        { type: "object", additionalProperties: true }
           }
         },
         SignalState: {
@@ -575,15 +595,23 @@ window.onload = function () {
         SignalMeta: {
           type: "object",
           properties: {
-            name:        { type: "string",  example: "ARS_FL_InjuryRiskAdaptive" },
+            signal_name: { type: "string",  example: "ARS_FL_InjuryRiskAdaptive" },
             std_name:    { type: "string",  example: "ARS_FL_InjuryRiskAdaptive", description: "Standardized name alias from signal_std_name.json" },
+            tag:         { type: "string", nullable: true },
             unit:        { type: "string",  example: "rpm" },
-            min:         { type: "number",  example: 0 },
-            max:         { type: "number",  example: 8000 },
+            min_value:   { type: "number",  example: 0 },
+            max_value:   { type: "number",  example: 8000 },
             writable:    { type: "boolean", example: false },
-            description: { type: "string",  example: "Engine speed in RPM" },
             states:      { type: "array",   items: { $ref: "#/components/schemas/SignalState" }, description: "Non-empty for enum/discrete signals" },
-            value:       { type: "number",  nullable: true, description: "Current value (null if unavailable)", example: 3000 }
+            group_name:  { type: "string", nullable: true },
+            widget_type: { type: "string", nullable: true },
+            alarm_warning_high:  { type: "number", nullable: true },
+            alarm_warning_low:   { type: "number", nullable: true },
+            alarm_critical_high: { type: "number", nullable: true },
+            alarm_critical_low:  { type: "number", nullable: true },
+            value:       { type: "number",  nullable: true, description: "Current value (null if unavailable)", example: 3000 },
+            status:      { type: "string", nullable: true, example: "ok" },
+            timestamp:   { type: "number", nullable: true, example: 1717243200.123 }
           }
         },
         SignalValue: {
@@ -607,16 +635,32 @@ window.onload = function () {
         SignalsAvailableResponse: {
           type: "object",
           properties: {
-            signals_info: { type: "array", items: { $ref: "#/components/schemas/SignalMeta" } }
+            signals_info: { type: "array", items: { $ref: "#/components/schemas/SignalMeta" } },
+            total: { type: "integer", example: 236 },
+            warnings: { type: "array", items: { type: "object" } }
           }
         },
         SignalWrite: {
           type: "object",
-          required: ["name","value"],
+          required: ["value"],
           properties: {
-            timestamp: { type: "string", format: "date-time" },
-            name:      { type: "string", example: "ACR_FL_RetractRequest" },
             value:     { type: "number", example: 2 }
+          }
+        },
+        SignalDetail: {
+          type: "object",
+          properties: {
+            signal_name: { type: "string" },
+            name: { type: "string" },
+            std_name: { type: "string" },
+            value: { type: "number" },
+            timestamp: { type: "number", nullable: true },
+            unit: { type: "string", nullable: true },
+            min: { type: "number" },
+            max: { type: "number" },
+            writable: { type: "boolean" },
+            description: { type: "string" },
+            states: { type: "array", items: { $ref: "#/components/schemas/SignalState" } }
           }
         },
         BatchSignalWrite: {
@@ -637,11 +681,11 @@ window.onload = function () {
         },
         Error: {
           type: "object",
-          required: ["error"],
           properties: {
-            error: { type: "string", example: "Signal 'X' not found" },
-            code:  { type: "integer", example: 3004, description: "App-level error code (10xx System, 20xx Hardware, 30xx Validation, 40xx Safety/Security)" },
-            id:    { type: "string",  example: "VAL_NOT_FOUND", description: "Human-readable error ID for logging and switch-case" }
+            detail: { oneOf: [ { type: "string" }, { type: "object", additionalProperties: true } ] },
+            error: { type: "string" },
+            code:  { type: "integer" },
+            id:    { type: "string" }
           }
         },
         SignalWriteAccepted: {
@@ -695,13 +739,7 @@ window.onload = function () {
             url:           { type: "string",  description: "URL path to retrieve the video file", example: "/api/restraints/video/50p_mid_40_SLL.mp4" }
           }
         },
-        ConflictError: {
-          type: "object",
-          properties: {
-            error:              { type: "string",  example: "section_id mismatch: expected 124, got 123" },
-            current_section_id: { type: "integer", example: 124 }
-          }
-        }
+        ConflictError: { type: "object", additionalProperties: true }
       }
     }
   };

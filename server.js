@@ -29,7 +29,7 @@ const http       = require('http');
 const path       = require('path');
 const fs         = require('fs');
 const { URL }    = require('url');
-const { WebSocketServer } = require('ws');
+const { WebSocketServer, WebSocket } = require('ws');
 
 const PORT   = process.env.PORT || 8000;
 const ROOT   = __dirname;
@@ -732,25 +732,25 @@ let alarmSeq = 1;
 const alarmHistory = [];
 
 function broadcastAlarm(alarm) {
-  const payload = JSON.stringify({ type: 'alarm', ...alarm });
+  const payload = { type: 'alarm', ...alarm };
   wsAlarms.clients.forEach(ws => {
-    if (ws.readyState === ws.OPEN) ws.send(payload);
+    safeSend(ws, payload);
   });
   wsAll.clients.forEach(ws => {
-    if (ws.readyState === ws.OPEN) ws.send(payload);
+    safeSend(ws, payload);
   });
   for (const [ws, state] of wsSubState.entries()) {
-    if (state.alarms && ws.readyState === ws.OPEN) ws.send(payload);
+    if (state.alarms) safeSend(ws, payload);
   }
 }
 
 function broadcastMetrics(metrics) {
-  const payload = JSON.stringify({ type: 'metrics', ...metrics });
+  const payload = { type: 'metrics', ...metrics };
   for (const [ws, state] of wsSubState.entries()) {
-    if (state.metrics && ws.readyState === ws.OPEN) ws.send(payload);
+    if (state.metrics) safeSend(ws, payload);
   }
   wsAll.clients.forEach(ws => {
-    if (ws.readyState === ws.OPEN) ws.send(payload);
+    safeSend(ws, payload);
   });
 }
 
@@ -1452,6 +1452,20 @@ const wsAll = new WebSocketServer({ server, path: '/ws/all' });
 
 const wsSubState = new Map(); // ws -> {signals:Set|'*', alarms:boolean, metrics:boolean, profileName:string|null}
 
+function isWsOpen(ws) {
+  return ws && ws.readyState === WebSocket.OPEN;
+}
+
+function safeSend(ws, payload) {
+  if (!isWsOpen(ws)) return false;
+  try {
+    ws.send(typeof payload === 'string' ? payload : JSON.stringify(payload));
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 function wsAuthorized(req) {
   if (!API_KEY_ENABLED) return true;
   try {
@@ -1536,7 +1550,7 @@ function sendSignalFrame(ws, names) {
     if (p) entries.push(p);
   }
   if (!entries.length) return;
-  ws.send(JSON.stringify({ timestamp: new Date().toISOString(), signals: entries }));
+  safeSend(ws, { timestamp: new Date().toISOString(), signals: entries });
 }
 
 function broadcastWrite(updates) {
@@ -1548,9 +1562,9 @@ function broadcastWrite(updates) {
   };
 
   for (const [ws, state] of wsSubState.entries()) {
-    if (ws.readyState !== ws.OPEN) continue;
+    if (!isWsOpen(ws)) continue;
     if (state.signals === '*') {
-      ws.send(JSON.stringify(payload));
+      safeSend(ws, payload);
       continue;
     }
     const filtered = names.filter(n => state.signals.has(n));
@@ -1559,7 +1573,7 @@ function broadcastWrite(updates) {
   }
 
   wsAll.clients.forEach(ws => {
-    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload));
+    if (isWsOpen(ws)) safeSend(ws, payload);
   });
 }
 
@@ -1574,7 +1588,7 @@ function attachSignalSocket(ws, req) {
   const clientVals = Object.fromEntries(Object.entries(signalValues).map(([k, v]) => [k, { ...v }]));
 
   const timer = setInterval(() => {
-    if (ws.readyState !== ws.OPEN) return;
+    if (!isWsOpen(ws)) return;
     const updates = [];
     const stateSignals = state.signals;
     SIGNALS_META.forEach(s => {
@@ -1603,69 +1617,73 @@ function attachSignalSocket(ws, req) {
       updates.push({ name: s.name, value: nv, timestamp: Date.now() / 1000 });
     });
     if (updates.length) {
-      ws.send(JSON.stringify({ timestamp: new Date().toISOString(), signals: updates.map(u => signalPayload(u.name, u.value, u.timestamp)).filter(Boolean) }));
+      safeSend(ws, { timestamp: new Date().toISOString(), signals: updates.map(u => signalPayload(u.name, u.value, u.timestamp)).filter(Boolean) });
     }
   }, 500);
 
   ws.on('message', (raw) => {
-    let msg;
-    try { msg = JSON.parse(raw.toString()); } catch (_) { return; }
-    if (msg.type === 'ping') {
-      ws.send(JSON.stringify({ type: 'pong' }));
-      return;
-    }
-
-    const action = (msg.type === 'subscribe' || msg.type === 'unsubscribe')
-      ? msg.type
-      : (msg.action || 'subscribe');
-    const requested = msg.signals !== undefined ? msg.signals : msg.channels;
-    const rawChannels = requested === '*' ? '*' : (Array.isArray(requested) ? requested : []);
-    const mapped = pickSignalsByState(state, rawChannels);
-
-    if (action === 'subscribe') {
-      for (const ch of mapped.channels) {
-        if (ch === 'alarms') state.alarms = true;
-        else if (ch === 'metrics') state.metrics = true;
+    try {
+      let msg;
+      try { msg = JSON.parse(raw.toString()); } catch (_) { return; }
+      if (msg.type === 'ping') {
+        safeSend(ws, { type: 'pong' });
+        return;
       }
-      if (mapped.channels.includes('*')) {
-        state.signals = '*';
-      } else {
-        if (state.signals === '*') state.signals = new Set();
-        mapped.channels.forEach(ch => {
-          if (ch !== 'alarms' && ch !== 'metrics') state.signals.add(ch);
-        });
-      }
-    } else if (action === 'unsubscribe') {
-      const chs = rawChannels === '*' ? ['*'] : rawChannels;
-      for (const c of chs) {
-        const low = String(c).toLowerCase();
-        if (low === 'alarms') state.alarms = false;
-        else if (low === 'metrics') state.metrics = false;
-        else if (c === '*') state.signals = new Set();
-        else if (state.signals !== '*') {
-          const n = resolveSignalName(c);
-          if (n) state.signals.delete(n);
+
+      const action = (msg.type === 'subscribe' || msg.type === 'unsubscribe')
+        ? msg.type
+        : (msg.action || 'subscribe');
+      const requested = msg.signals !== undefined ? msg.signals : msg.channels;
+      const rawChannels = requested === '*' ? '*' : (Array.isArray(requested) ? requested : []);
+      const mapped = pickSignalsByState(state, rawChannels);
+
+      if (action === 'subscribe') {
+        for (const ch of mapped.channels) {
+          if (ch === 'alarms') state.alarms = true;
+          else if (ch === 'metrics') state.metrics = true;
+        }
+        if (mapped.channels.includes('*')) {
+          state.signals = '*';
+        } else {
+          if (state.signals === '*') state.signals = new Set();
+          mapped.channels.forEach(ch => {
+            if (ch !== 'alarms' && ch !== 'metrics') state.signals.add(ch);
+          });
+        }
+      } else if (action === 'unsubscribe') {
+        const chs = rawChannels === '*' ? ['*'] : rawChannels;
+        for (const c of chs) {
+          const low = String(c).toLowerCase();
+          if (low === 'alarms') state.alarms = false;
+          else if (low === 'metrics') state.metrics = false;
+          else if (c === '*') state.signals = new Set();
+          else if (state.signals !== '*') {
+            const n = resolveSignalName(c);
+            if (n) state.signals.delete(n);
+          }
         }
       }
-    }
 
-    const ackChannels = action === 'subscribe' ? mapped.channels : (rawChannels === '*' ? ['*'] : rawChannels);
-    ws.send(JSON.stringify({
-      type: `${action}_ack`,
-      action,
-      channels: ackChannels,
-      count: ackChannels.length,
-      warnings: mapped.warnings,
-    }));
-    // legacy ack for existing demo clients
-    ws.send(JSON.stringify({ type: 'subscribed', signals: state.signals === '*' ? '*' : [...state.signals], count: state.signals === '*' ? SIGNALS_META.length : state.signals.size }));
+      const ackChannels = action === 'subscribe' ? mapped.channels : (rawChannels === '*' ? ['*'] : rawChannels);
+      safeSend(ws, {
+        type: `${action}_ack`,
+        action,
+        channels: ackChannels,
+        count: ackChannels.length,
+        warnings: mapped.warnings,
+      });
+      // legacy ack for existing demo clients
+      safeSend(ws, { type: 'subscribed', signals: state.signals === '*' ? '*' : [...state.signals], count: state.signals === '*' ? SIGNALS_META.length : state.signals.size });
 
-    if (action === 'subscribe') {
-      if (state.signals === '*') {
-        sendSignalFrame(ws, SIGNALS_META.filter(s => !s.writable).map(s => s.name));
-      } else {
-        sendSignalFrame(ws, [...state.signals]);
+      if (action === 'subscribe') {
+        if (state.signals === '*') {
+          sendSignalFrame(ws, SIGNALS_META.filter(s => !s.writable).map(s => s.name));
+        } else {
+          sendSignalFrame(ws, [...state.signals]);
+        }
       }
+    } catch (_) {
+      safeSend(ws, { type: 'error', code: 'ws_message_error', message: 'Failed to process websocket message' });
     }
   });
 
@@ -1703,7 +1721,7 @@ wsAll.on('connection', (ws, req) => {
   ws.on('message', raw => {
     try {
       const msg = JSON.parse(raw.toString());
-      if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
+      if (msg.type === 'ping') safeSend(ws, { type: 'pong' });
     } catch (_) {}
   });
 });

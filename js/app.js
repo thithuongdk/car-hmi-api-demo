@@ -156,7 +156,8 @@ function _applyMode() {
  */
 function _wsSubscribe(signals, type = 'subscribe') {
   if (!App.ws || App.ws.readyState !== 1) return;
-  App.ws.send(JSON.stringify({ type, signals }));
+  const payloadSignals = signals === '*' ? ['*'] : signals;
+  App.ws.send(JSON.stringify({ type, signals: payloadSignals }));
 }
 
 function _connectWS() {

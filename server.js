@@ -1445,10 +1445,11 @@ app.get('*', (req, res) => res.sendFile(path.join(ROOT, 'index.html')));
 
 // ── HTTP + WebSocket server ───────────────────────────────────────────────────
 const server = http.createServer(app);
-const wsSignals = new WebSocketServer({ server, path: '/ws/signals' });
-const wsSubscribe = new WebSocketServer({ server, path: '/ws/subscribe' });
-const wsAlarms = new WebSocketServer({ server, path: '/ws/alarms' });
-const wsAll = new WebSocketServer({ server, path: '/ws/all' });
+const wsOpts = { noServer: true, perMessageDeflate: false };
+const wsSignals = new WebSocketServer(wsOpts);
+const wsSubscribe = new WebSocketServer(wsOpts);
+const wsAlarms = new WebSocketServer(wsOpts);
+const wsAll = new WebSocketServer(wsOpts);
 
 const wsSubState = new Map(); // ws -> {signals:Set|'*', alarms:boolean, metrics:boolean, profileName:string|null}
 
@@ -1459,10 +1460,31 @@ function isWsOpen(ws) {
 function safeSend(ws, payload) {
   if (!isWsOpen(ws)) return false;
   try {
-    ws.send(typeof payload === 'string' ? payload : JSON.stringify(payload));
+    ws.send(typeof payload === 'string' ? payload : JSON.stringify(payload), { compress: false });
     return true;
   } catch (_) {
     return false;
+  }
+}
+
+function parseWsJson(raw) {
+  if (raw === null || raw === undefined) return null;
+  let text;
+  if (typeof raw === 'string') {
+    text = raw;
+  } else if (Buffer.isBuffer(raw)) {
+    text = raw.toString('utf8');
+  } else if (raw instanceof ArrayBuffer) {
+    text = Buffer.from(raw).toString('utf8');
+  } else if (ArrayBuffer.isView(raw)) {
+    text = Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString('utf8');
+  } else {
+    text = String(raw);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    return null;
   }
 }
 
@@ -1623,8 +1645,8 @@ function attachSignalSocket(ws, req) {
 
   ws.on('message', (raw) => {
     try {
-      let msg;
-      try { msg = JSON.parse(raw.toString()); } catch (_) { return; }
+      const msg = parseWsJson(raw);
+      if (!msg) return;
       if (msg.type === 'ping') {
         safeSend(ws, { type: 'pong' });
         return;
@@ -1706,10 +1728,8 @@ wsAlarms.on('connection', (ws, req) => {
     return;
   }
   ws.on('message', raw => {
-    try {
-      const msg = JSON.parse(raw.toString());
-      if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
-    } catch (_) {}
+    const msg = parseWsJson(raw);
+    if (msg?.type === 'ping') safeSend(ws, { type: 'pong' });
   });
 });
 
@@ -1719,10 +1739,34 @@ wsAll.on('connection', (ws, req) => {
     return;
   }
   ws.on('message', raw => {
-    try {
-      const msg = JSON.parse(raw.toString());
-      if (msg.type === 'ping') safeSend(ws, { type: 'pong' });
-    } catch (_) {}
+    const msg = parseWsJson(raw);
+    if (msg?.type === 'ping') safeSend(ws, { type: 'pong' });
+  });
+});
+
+server.on('upgrade', (req, socket, head) => {
+  const requestUrl = req.url || '/';
+  let pathname = '/';
+  try {
+    pathname = new URL(requestUrl, 'http://localhost').pathname;
+  } catch (_) {
+    pathname = requestUrl.split('?')[0] || '/';
+  }
+
+  let target = null;
+  if (pathname === '/ws/signals') target = wsSignals;
+  else if (pathname === '/ws/subscribe') target = wsSubscribe;
+  else if (pathname === '/ws/alarms') target = wsAlarms;
+  else if (pathname === '/ws/all') target = wsAll;
+
+  if (!target) {
+    socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  target.handleUpgrade(req, socket, head, (ws) => {
+    target.emit('connection', ws, req);
   });
 });
 

@@ -11,6 +11,7 @@
     "test:dbc": "node tests/test_dbc2signal.js",
     "test:server": "node tests/test_server_api.js",
     "test:ws": "node tests/test_websocket.js",
+    "test:ws:smoke": "node tests/ws_smoke_cli.js",
     "test:stress": "node tests/test_stress.js",
     "test:quick": "node tests/run_all_tests.js --quick"
   },

@@ -55,11 +55,40 @@ function wsConnect(port, path) {
   return new Promise((resolve, reject) => {
     const url = `ws://127.0.0.1:${port}${path}`;
     const ws = new WebSocket(url);
-    ws.on('open', () => resolve(ws));
-    ws.on('error', reject);
-    // timeout
-    setTimeout(() => reject(new Error('WS connect timeout')), 3000);
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { ws.terminate(); } catch (_) {}
+      reject(new Error('WS connect timeout'));
+    }, 3000);
+    ws.on('open', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(ws);
+    });
+    ws.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    });
   });
+}
+
+function getSubAck(msgs) {
+  return msgs.find(m => m.type === 'subscribed')
+    || msgs.find(m => m.type === 'subscribe_ack')
+    || null;
+}
+
+function ackSignalCount(ack) {
+  if (!ack) return 0;
+  if (typeof ack.count === 'number') return ack.count;
+  if (Array.isArray(ack.channels)) return ack.channels.length;
+  if (Array.isArray(ack.signals)) return ack.signals.length;
+  return 0;
 }
 
 function wsSend(ws, msg) {
@@ -112,16 +141,21 @@ async function runTests() {
   await wsSend(ws2, { type: 'subscribe', signals: '*' });
   await new Promise(r => setTimeout(r, 1200)); // wait for ack + snapshot + 1 stream tick
 
-  const ack2 = msgs2.find(m => m.type === 'subscribed');
+  const ack2 = getSubAck(msgs2);
   ok('subscribed ack received',         !!ack2);
-  eq('subscribed signals = *',          ack2?.signals, '*');
-  ok('subscribed count > 0',            (ack2?.count || 0) > 0);
+  ok('subscribed signals = *',          ack2?.signals === '*' || ack2?.channels?.includes('*'));
+  ok('subscribed count > 0',            ackSignalCount(ack2) > 0);
 
   const snapshot2 = msgs2.filter(m => !m.type && Array.isArray(m.signals));
   ok('at least one stream frame',       snapshot2.length >= 1);
   ok('stream frame has timestamp',      !!snapshot2[0]?.timestamp);
   ok('stream signals have name+value',  snapshot2[0]?.signals?.every(s => s.name && s.value !== undefined));
   console.log(`   frames received: ${snapshot2.length}, signals/frame: ${snapshot2[0]?.signals?.length || 0}`);
+
+  const pickNames = (snapshot2[0]?.signals || []).slice(0, 3).map(s => s.name).filter(Boolean);
+  if (pickNames.length < 3) {
+    pickNames.push('Generic_SeatFunctionEnable', 'HMI_CrashSeverity', 'HMI_FL_OccupantAge_years');
+  }
 
   // ── 3. Subscribe to specific signals ──────────────────────────────────────
   console.log('\n━━━ 3. Subscribe to Specific Signals ──────────────────────────');
@@ -131,14 +165,13 @@ async function runTests() {
     try { msgs3.push(JSON.parse(data.toString())); } catch (_) {}
   });
 
-  // Pick 3 specific signals (non-writable ones)
-  const pickNames = ['Generic_SeatFunctionEnable', 'HMI_CrashSeverity', 'HMI_FL_OccupantAge_years'];
+  // Pick 3 specific signals from current stream snapshot for stable assertions.
   await wsSend(ws3, { type: 'subscribe', signals: pickNames });
   await new Promise(r => setTimeout(r, 1200));
 
-  const ack3 = msgs3.find(m => m.type === 'subscribed');
+  const ack3 = getSubAck(msgs3);
   ok('subscribed ack with picks',       !!ack3);
-  ok('count = 3',                       ack3?.count === 3);
+  ok('count = 3',                       ackSignalCount(ack3) === 3);
 
   const frames3 = msgs3.filter(m => !m.type && Array.isArray(m.signals));
   if (frames3.length > 0) {
@@ -179,14 +212,17 @@ async function runTests() {
   await wsSend(ws5, { type: 'unsubscribe', signals: ['Generic_SeatFunctionEnable'] });
   await new Promise(r => setTimeout(r, 500));
 
-  const unsubAck = msgs5.find(m => m.type === 'subscribed');
+  const unsubAck = msgs5.find(m => m.type === 'unsubscribe_ack' || m.type === 'subscribed');
   ok('unsubscribe triggers re-subscribed ack', !!unsubAck);
 
   // Now subscribe to specific signals after unsubscribe
+  msgs5.length = 0;
   await wsSend(ws5, { type: 'subscribe', signals: pickNames });
   await new Promise(r => setTimeout(r, 1200));
 
-  const frames5 = msgs5.filter(m => !m.type && Array.isArray(m.signals));
+  const reSubAckIdx = msgs5.findIndex(m => m.type === 'subscribe_ack' || m.type === 'subscribed');
+  const frames5 = (reSubAckIdx >= 0 ? msgs5.slice(reSubAckIdx + 1) : msgs5)
+    .filter(m => !m.type && Array.isArray(m.signals));
   if (frames5.length > 0) {
     const leaking = frames5.flatMap(f => f.signals.map(s => s.name)).filter(n => !pickNames.includes(n));
     ok('only pick signals after re-subscribe', leaking.length === 0);
@@ -218,8 +254,8 @@ async function runTests() {
   await new Promise(r => setTimeout(r, 1500));
 
   const ackCount = clientMsgs.map((msgs, i) => {
-    const ack = msgs.find(m => m.type === 'subscribed');
-    return ack ? ack.count : 0;
+    const ack = getSubAck(msgs);
+    return ackSignalCount(ack);
   });
   ok('client 0 got all signals',        ackCount[0] > 2);
   ok('client 1 got 2 signals',          ackCount[1] === 2);

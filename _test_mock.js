@@ -64,8 +64,9 @@ function ok(label, val) {
   console.log('\n=== GET /api/profiles ===');
   const profs = await MockAPI.getProfiles();
   ok('returns profiles array',      Array.isArray(profs.profiles));
-  ok('has section_id',              typeof profs.section_id === 'number');
-  profs.profiles.forEach(p => console.log('   -', p.profile_name, '| sigs:', p.signals.length, p.selected?'[active]':''));
+  ok('no top-level section_id',     typeof profs.section_id === 'undefined');
+  ok('profile section_id present',  typeof profs.profiles[0]?.section_id === 'string');
+  profs.profiles.forEach(p => console.log('   -', p.name, '| sigs:', p.signals.length));
 
   console.log('\n=== GET /api/profile?name=U0 ===');
   const p0 = await MockAPI.getProfile('U0');
@@ -76,11 +77,11 @@ function ok(label, val) {
   console.log('\n=== Profile CRUD ===');
   const cp = await MockAPI.createProfile({ profile_name: '_TMP', signals: ['HB_FL_ActivationLevel'] });
   ok('createProfile ok',            cp.profile_name === '_TMP');
-  const up = await MockAPI.updateProfile({ profile_name: '_TMP', signals: ['HB_FL_ActivationLevel','HB_FR_ActivationLevel'], section_id: d.section_id });
+  const up = await MockAPI.updateProfile({ profile_name: '_TMP', signals: ['HB_FL_ActivationLevel','HB_FR_ActivationLevel'], section_id: cp.section_id });
   ok('updateProfile signals count', up.signals.length === 2);
   await MockAPI.deleteProfile('_TMP');
   const afterDel = (await MockAPI.getProfiles()).profiles;
-  ok('deleteProfile removed it',    !afterDel.find(p => p.profile_name === '_TMP'));
+  ok('deleteProfile removed it',    !afterDel.find(p => p.name === '_TMP'));
 
   console.log('\n=== GET /configs ===');
   const cfgs = await MockAPI.getConfigs();
@@ -97,7 +98,9 @@ function ok(label, val) {
   ok('has section_id',              typeof cfg.section_id === 'number');
   console.log('   can_bus keys:', Object.keys(cfg.hardware?.can_bus || {}).join(', '));
 
-  const txName = d.signals_meta.find(s => s.writable)?.name;
+  const activeProfile = d.profiles.find(p => p.selected);
+  const txName = d.signals_meta.find(s => s.writable && activeProfile?.signals?.includes(s.name))?.name
+    || d.signals_meta.find(s => s.writable)?.name;
   console.log('\n=== PUT /config ===');
   const origDays = cfg.storage.retention_days;
   const wcRes = await MockAPI.updateConfig({ section_id: d.section_id, storage: { retention_days: origDays + 1 } });
@@ -108,9 +111,10 @@ function ok(label, val) {
 
   console.log('\n=== GET /signals ===');
   const sigs = await MockAPI.getSignals();
-  ok('returns signals',             Array.isArray(sigs.signals) && sigs.signals.length > 0);
-  ok('has value field',             typeof sigs.signals[0]?.value !== 'undefined');
-  console.log('   count:', sigs.signals.length);
+  ok('returns items',               Array.isArray(sigs.items) && sigs.items.length > 0);
+  ok('has value field',             typeof sigs.items[0]?.value !== 'undefined');
+  ok('has warnings array',          Array.isArray(sigs.warnings));
+  console.log('   count:', sigs.items.length);
 
   console.log('\n=== GET /signals/available ===');
   const avail = await MockAPI.getSignalsAvailable();

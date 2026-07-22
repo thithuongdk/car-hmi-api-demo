@@ -169,6 +169,10 @@ node tests/run_all_tests.js
 # Quick mode — offline tests only (mock + DBC parser)
 node tests/run_all_tests.js --quick
 
+# WebSocket smoke test against deployed/local target (PASS/FAIL)
+npm run test:ws:smoke -- --base https://car-hmi-api-demo.onrender.com
+npm run test:ws:smoke -- --base http://localhost:8000
+
 # Individual test suites
 node _test_mock.js                     # 39+ tests — Mock API (Store, Profiles, Config, Signals, WS)
 node tests/test_dbc2signal.js          # 20+ tests — DBC parser (parsing, TX/RX, units, backup)

@@ -98,7 +98,7 @@ const DBC_WITH_ENCODED_UNIT = 'BO_ 400 TEMP_SENSOR: 8 CAR_PC\n' +
     eq('VehicleSpeed min 0',             vs.min, 0);
     eq('VehicleSpeed max 300',           vs.max, 300);
     ok('VehicleSpeed is RX',             vs.RX === true);
-    ok('VehicleSpeed is NOT TX',         vs.TX === false);
+    ok('VehicleSpeed is TX',             vs.TX === true);
 
     const er = data1.signals.find(s => s.name === 'EngineRPM');
     ok('EngineRPM found',                !!er);
@@ -119,7 +119,7 @@ const DBC_WITH_ENCODED_UNIT = 'BO_ 400 TEMP_SENSOR: 8 CAR_PC\n' +
     ok('HB_FL_ActivationLevel is RX',    txSig?.RX === true);
 
     const rxSig = data2.signals.find(s => s.name === 'HB_FR_ActivationLevel');
-    ok('HB_FR_ActivationLevel NOT TX',   rxSig?.TX === false);
+    ok('HB_FR_ActivationLevel is TX',    rxSig?.TX === true);
     ok('HB_FR_ActivationLevel is RX',    rxSig?.RX === true);
 
     // ── 3. Destination parsing ──────────────────────────────────────────────

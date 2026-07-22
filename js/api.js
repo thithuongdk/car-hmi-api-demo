@@ -22,11 +22,47 @@ const RealAPI = (() => {
   const _base = _resolveBaseUrl();
   window.__CAR_HMI_API_BASE = _base;
 
-  async function _req(method, path, body) {
+  function _getApiKey() {
+    const fromQuery = new URLSearchParams(location.search).get('api_key');
+    const fromStorage = localStorage.getItem('car_hmi_api_key');
+    const fromWindow = window.CAR_HMI_API_KEY;
+    return fromQuery || fromWindow || fromStorage || '';
+  }
+
+  function _getClientId() {
+    let id = localStorage.getItem('car_hmi_client_id');
+    if (!id) {
+      id = `client-${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem('car_hmi_client_id', id);
+    }
+    return id;
+  }
+
+  function _getProfileName() {
+    return localStorage.getItem('car_hmi_profile_name') || '';
+  }
+
+  function _setProfileName(name) {
+    if (!name) return;
+    localStorage.setItem('car_hmi_profile_name', name);
+  }
+
+  async function _req(method, path, body, extraHeaders) {
     const opts = {
       method,
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Client-Id': _getClientId(),
+      },
     };
+    const apiKey = _getApiKey();
+    if (apiKey) opts.headers['X-API-Key'] = apiKey;
+    const profileName = _getProfileName();
+    if (profileName) opts.headers['X-Profile-Name'] = profileName;
+    if (extraHeaders && typeof extraHeaders === 'object') {
+      Object.assign(opts.headers, extraHeaders);
+    }
     if (body !== undefined) opts.body = JSON.stringify(body);
 
     let res, json;
@@ -41,11 +77,16 @@ const RealAPI = (() => {
     Log.api(method, path, body ?? null, json, res.status);
 
     if (res.status >= 400) {
-      throw Object.assign(new Error(json.error || `HTTP ${res.status}`), json);
+      const detailMsg = typeof json?.detail === 'string'
+        ? json.detail
+        : (json?.detail?.message || json?.error || `HTTP ${res.status}`);
+      throw Object.assign(new Error(detailMsg), json);
     }
 
     // Keep App.sectionId in sync with whatever the server last returned
     if (json.section_id !== undefined) App.sectionId = json.section_id;
+
+    if (json.active) _setProfileName(json.active);
 
     return json;
   }
@@ -53,19 +94,30 @@ const RealAPI = (() => {
   return {
     // ── Profiles ─────────────────────────────────────────────────────────────
     getProfiles()           { return _req('GET',    '/api/profiles'); },
-    getProfile(name)        { return _req('GET',    `/api/profile?name=${encodeURIComponent(name)}`); },
+    getProfile(name)        {
+      const q = name ? `?name=${encodeURIComponent(name)}` : '';
+      return _req('GET', `/api/profile${q}`);
+    },
     createProfile(payload)  { return _req('POST',   '/api/profile', payload); },
     updateProfile(payload)  { return _req('PUT',    '/api/profile', payload); },
     deleteProfile(name)     { return _req('DELETE', `/api/profile/${encodeURIComponent(name)}`); },
 
-    // selectProfile: server uses PUT /api/profile with selected:true
-    async selectProfile(name) {
-      return _req('PUT', '/api/profile', {
-        profile_name: name,
-        selected: true,
-        section_id: App.sectionId,
-      });
+    // car-hmi compatible active profile endpoint
+    async selectProfile(name, options = {}) {
+      const extraHeaders = {};
+      if (options.devMode) extraHeaders['X-Dev-Mode'] = 'true';
+      const res = await _req('PUT', '/api/profile/active', { name }, extraHeaders);
+      _setProfileName(name);
+      return res;
     },
+
+    getProfileSessions(options = {}) {
+      const extraHeaders = {};
+      if (options.devMode) extraHeaders['X-Dev-Mode'] = 'true';
+      return _req('GET', '/api/profile/sessions', undefined, extraHeaders);
+    },
+    heartbeatProfile()      { return _req('POST', '/api/profile/heartbeat', {}); },
+    setProfileOffline()     { return _req('POST', '/api/profile/offline', {}); },
 
     // ── Configs ───────────────────────────────────────────────────────────────
     getConfigs()           { return _req('GET', '/configs'); },
@@ -95,6 +147,19 @@ const RealAPI = (() => {
         params.set('seat_x_mm', String(seat_x_mm));
       }
       return _req('GET', `/api/restraints/match?${params}`);
+    },
+
+    wsUrl(path = '/ws/signals') {
+      const u = new URL(_base);
+      u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+      u.pathname = path;
+      const key = _getApiKey();
+      const profile = _getProfileName();
+      const cid = _getClientId();
+      if (key) u.searchParams.set('api_key', key);
+      if (profile) u.searchParams.set('profile_name', profile);
+      if (cid) u.searchParams.set('client_id', cid);
+      return u.toString();
     },
   };
 })();

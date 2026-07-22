@@ -8,11 +8,14 @@
 const App = {
   mode: "dev",            // "user" | "dev"
   activeProfile: null,    // profile object
+  profiles: [],
   ws: null,               // WebSocket / MockWebSocket instance
   signalsMeta: [],        // from GET /signals/available
   currentValues: {},      // { name: { value, timestamp } }
   _wsBadge: null,
   sectionId: 1,           // tracks latest section_id from server
+  profileSessions: null,
+  heartbeatTimer: null,
 };
 
 // Auto-detect real server vs local/static mock.
@@ -25,7 +28,6 @@ function _apiBase() {
     || localStorage.getItem('car_hmi_api_base')
     || location.origin;
 }
-``
 
 function _wsBase() {
   const base = _apiBase();
@@ -55,12 +57,8 @@ async function _detectServer() {
     }
   }
 
-  const isNonLocal = (
-    typeof location !== 'undefined' &&
-    !['localhost', '127.0.0.1', ''].includes(location.hostname) &&
-    location.protocol !== 'file:'
-  );
-  if (!isNonLocal) return false;
+  // Try probing even on localhost so demo can use a real backend at :8000.
+  if (typeof location !== 'undefined' && location.protocol === 'file:') return false;
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 2000);
@@ -102,6 +100,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   await _loadConfigs();
   _initDashboard();
   _connectWS();
+  _startProfileHeartbeat();
+
+  window.addEventListener('beforeunload', () => {
+    if (API && typeof API.setProfileOffline === 'function') {
+      API.setProfileOffline().catch(() => {});
+    }
+  });
   // Pre-load info so first tab click is instant
   API.getInfo().then(_renderInfoPanel).catch(() => {});
 });
@@ -159,7 +164,8 @@ function _connectWS() {
 
   let ws;
   if (_onRealServer) {
-    ws = new WebSocket(`${_wsBase()}/ws/signals`);
+    const url = (typeof RealAPI?.wsUrl === 'function') ? RealAPI.wsUrl('/ws/signals') : `${_wsBase()}/ws/signals`;
+    ws = new WebSocket(url);
   } else {
     ws = new MockWebSocket('ws://localhost:8000/ws/signals');
   }
@@ -179,16 +185,30 @@ function _connectWS() {
 
   ws.onmessage = (evt) => {
     const payload = JSON.parse(evt.data);
-    if (payload.type === 'subscribed') {
+    if (payload.type === 'subscribed' || payload.type === 'subscribe_ack') {
       const label = payload.signals === '*' ? 'ALL signals' : `${payload.count} signals`;
       Log.ws('SUBSCRIBED', label);
       return;
     }
-    if (payload.type === 'pong') return;
-    for (const sig of payload.signals) {
-      App.currentValues[sig.name] = { value: sig.value, timestamp: payload.timestamp };
+    if (payload.type === 'unsubscribe_ack') {
+      Log.ws('UNSUBSCRIBED', `${payload.count || 0} channels`);
+      return;
     }
-    _updateSignalCards(payload.signals);
+    if (payload.type === 'metrics') {
+      Log.ws('METRICS', `cpu=${payload.cpu_percent ?? '-'} ram=${payload.ram_percent ?? '-'}`);
+      return;
+    }
+    if (payload.type === 'alarm') {
+      Log.ws('ALARM', `${payload.signal_name || '-'} ${payload.level || '-'}`);
+      return;
+    }
+    if (payload.type === 'pong') return;
+    for (const sig of (payload.signals || [])) {
+      const sigName = sig.name || sig.signal_name;
+      if (!sigName) continue;
+      App.currentValues[sigName] = { value: sig.value, timestamp: payload.timestamp };
+    }
+    _updateSignalCards((payload.signals || []).map(s => ({ ...s, name: s.name || s.signal_name })));
   };
 
   ws.onclose = () => {
@@ -204,12 +224,29 @@ function _connectWS() {
   };
 }
 
+function _startProfileHeartbeat() {
+  if (!API || typeof API.heartbeatProfile !== 'function') return;
+  if (App.heartbeatTimer) clearInterval(App.heartbeatTimer);
+  API.heartbeatProfile().catch(() => {});
+  App.heartbeatTimer = setInterval(() => {
+    API.heartbeatProfile().catch(() => {});
+  }, 30000);
+}
+
 // ── Signals metadata ─────────────────────────────────────────────────────────
 async function _loadSignalsMeta() {
   const res = await API.getSignalsAvailable();
-  App.signalsMeta = res.signals_info;
+  App.signalsMeta = (res.signals_info || []).map(s => ({
+    ...s,
+    name: s.name || s.signal_name,
+    min: s.min ?? s.min_value ?? 0,
+    max: s.max ?? s.max_value ?? 100,
+    states: Array.isArray(s.states) ? s.states : [],
+    writable: Boolean(s.writable),
+    description: s.description || '',
+  }));
   // seed currentValues from meta
-  res.signals_info.forEach(s => {
+  App.signalsMeta.forEach(s => {
     App.currentValues[s.name] = { value: s.value, timestamp: s.timestamp };
   });
 }
@@ -221,7 +258,7 @@ function _getVisibleSignals() {
   if (App.mode === "dev") return App.signalsMeta;
   if (!App.activeProfile) return [];
   const names = new Set(App.activeProfile.signals);
-  return App.signalsMeta.filter(s => names.has(s.name));
+  return App.signalsMeta.filter(s => names.has(s.name) || names.has(s.std_name));
 }
 
 function _renderDashboard() {
@@ -361,34 +398,100 @@ function _updateCard(name, v) {
 }
 
 // ── Profiles ──────────────────────────────────────────────────────────────────
+function _profileName(p) {
+  return p?.name || p?.profile_name || '';
+}
+
+function _profileSignals(p) {
+  return Array.isArray(p?.signals) ? p.signals : [];
+}
+
+function _profilePermission(p) {
+  const raw = Array.isArray(p?.permission) ? p.permission : [];
+  if (!raw.length) return ['read'];
+  return raw;
+}
+
+function _normalizeProfilesResponse(res) {
+  const profiles = Array.isArray(res?.profiles) ? res.profiles.map(p => {
+    const name = _profileName(p);
+    const signals = _profileSignals(p);
+    const permission = _profilePermission(p);
+    const selected = Boolean(p?.selected) || (res?.active && name === res.active);
+    return {
+      ...p,
+      profile_name: name,
+      name,
+      signals,
+      permission,
+      selected,
+      description: p?.description || '',
+    };
+  }) : [];
+
+  let active = profiles.find(p => p.selected) || null;
+  if (!active && profiles.length) active = profiles[0];
+
+  return {
+    profiles,
+    active,
+    activeName: res?.active || active?.name || null,
+    globalActive: res?.global_active || null,
+    total: res?.total ?? profiles.length,
+    sectionId: res?.section_id ?? App.sectionId,
+  };
+}
+
 async function _loadProfiles() {
   const res = await API.getProfiles();
-  App.sectionId = res.section_id;
+  const normalized = _normalizeProfilesResponse(res);
+  App.sectionId = normalized.sectionId;
+  App.profiles = normalized.profiles;
+  App.activeProfile = normalized.active;
+  if (normalized.activeName) localStorage.setItem('car_hmi_profile_name', normalized.activeName);
+
   const sel = document.getElementById("profile-select");
   sel.innerHTML = "";
-  res.profiles.forEach(p => {
+  normalized.profiles.forEach(p => {
     const opt = document.createElement("option");
-    opt.value = p.profile_name;
-    opt.textContent = p.profile_name + (p.selected ? " ✓" : "");
-    if (p.selected) { opt.selected = true; App.activeProfile = p; }
+    opt.value = p.name;
+    const perm = p.permission?.join('/') || 'read';
+    opt.textContent = `${p.name}${p.selected ? ' ✓' : ''} [${perm}]`;
+    if (p.selected) { opt.selected = true; }
     sel.appendChild(opt);
   });
-  sel.addEventListener("change", async () => {
-    await API.selectProfile(sel.value);
+
+  sel.onchange = async () => {
+    await API.selectProfile(sel.value, { devMode: App.mode === 'dev' });
     await _loadProfiles();
     _renderDashboard();
     if (App.mode !== 'dev') _wsSubscribe(App.activeProfile?.signals || '*');
-  });
-  _renderProfilesPanel(res.profiles, res.section_id);
+  };
+
+  if (API.getProfileSessions) {
+    try {
+      App.profileSessions = await API.getProfileSessions({ devMode: App.mode === 'dev' });
+    } catch (_) {
+      App.profileSessions = null;
+    }
+  }
+
+  _renderProfilesPanel(normalized, App.profileSessions);
 }
 
-function _renderProfilesPanel(profiles, sectionId) {
+function _renderProfilesPanel(profileData, sessionsData) {
+  const profiles = profileData.profiles;
+  const sectionId = profileData.sectionId;
   const container = document.getElementById("profiles-list");
   container.innerHTML = `
     <div class="section-id-bar">
       <span>section_id (optimistic lock):</span><strong>${sectionId}</strong>
       <span style="color:var(--muted);font-size:11px">- PUT/DELETE must send matching section_id or BE will deny (409)</span>
     </div>
+    ${sessionsData ? `<div class="section-id-bar" style="margin-top:8px">
+      <span>sessions:</span><strong>${sessionsData.total || 0}</strong>
+      <span style="color:var(--muted);font-size:11px">online ${sessionsData.online_total || 0} / offline ${sessionsData.offline_total || 0}</span>
+    </div>` : ''}
     <div class="card-grid" id="profiles-grid"></div>`;
 
   const grid = document.getElementById("profiles-grid");
@@ -401,16 +504,18 @@ function _renderProfilesPanel(profiles, sectionId) {
     }).join("") + (p.signals.length > 6 ? `<span class="chip">+${p.signals.length - 6}</span>` : "");
 
     const writableCount = p.signals.filter(n => App.signalsMeta.find(s => s.name === n)?.writable).length;
+    const permissionLabel = (p.permission || ['read']).join(' / ');
     card.innerHTML = `
       <div class="item-card-header">
-        <span class="item-card-name">${p.profile_name}</span>
+        <span class="item-card-name">${p.name}</span>
         <div class="item-card-actions">
-          ${p.selected ? '<span class="badge badge--selected">Active</span>' : `<button class="btn btn-sm" onclick="App._selectProfile('${p.profile_name}')">Set Active</button>`}
-          <button class="btn btn-sm" onclick="App._editProfile('${p.profile_name}')">Edit</button>
-          <button class="btn btn-sm btn-danger" onclick="App._deleteProfile('${p.profile_name}')">Del</button>
+          ${p.selected ? '<span class="badge badge--selected">Active</span>' : `<button class="btn btn-sm" onclick="App._selectProfile('${p.name}')">Set Active</button>`}
+          <button class="btn btn-sm" onclick="App._editProfile('${p.name}')">Edit</button>
+          <button class="btn btn-sm btn-danger" onclick="App._deleteProfile('${p.name}')">Del</button>
         </div>
       </div>
       <div class="item-card-body">
+        <div style="margin-bottom:4px"><span class="badge badge--neutral">${permissionLabel}</span></div>
         <div>${p.signals.length} signals &nbsp;<span style="color:var(--accent);font-size:11px">${writableCount} writable</span></div>
         <div class="signals-chips">${chips}</div>
       </div>`;
@@ -419,7 +524,8 @@ function _renderProfilesPanel(profiles, sectionId) {
 }
 
 App._selectProfile = async (name) => {
-  await API.selectProfile(name);
+  await API.selectProfile(name, { devMode: App.mode === 'dev' });
+  localStorage.setItem('car_hmi_profile_name', name);
   await _loadProfiles();
   _renderDashboard();
   if (App.mode !== 'dev') _wsSubscribe(App.activeProfile?.signals || '*');
@@ -453,12 +559,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const nameEl  = document.getElementById("pf-name");
     const name    = (nameEl.value || nameEl.dataset.editName || "").trim();
     const signals = [...document.querySelectorAll("#pf-signals-checks input:checked")].map(i => i.value);
+    let permission = [...document.querySelectorAll("#pf-permission input:checked")].map(i => i.value);
+    if (!permission.length) permission = ['read'];
+    if (permission.includes('full')) permission = ['full'];
+    const description = (document.getElementById('pf-description').value || '').trim();
     if (!name) return alert("Profile name required");
     try {
       if (mode === "edit") {
-        await API.updateProfile({ profile_name: name, signals, section_id: App.sectionId });
+        await API.updateProfile({ name, signals, permission, description, section_id: String(App.sectionId).padStart(12, '0').slice(-12) });
       } else {
-        await API.createProfile({ profile_name: name, signals });
+        await API.createProfile({ name, signals, permission, description });
       }
       _closeProfileModal();
       await _loadProfiles();
@@ -498,6 +608,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Live count when checking individual items
   document.getElementById("pf-signals-checks").addEventListener("change", _updateCheckCount);
+
+  // Permission normalization: full overrides others, and at least one permission remains.
+  document.querySelectorAll('#pf-permission input').forEach(el => {
+    el.addEventListener('change', () => {
+      const full = document.querySelector('#pf-permission input[value="full"]');
+      const read = document.querySelector('#pf-permission input[value="read"]');
+      const write = document.querySelector('#pf-permission input[value="write"]');
+      if (el.value === 'full' && el.checked) {
+        read.checked = false;
+        write.checked = false;
+      }
+      if ((el.value === 'read' || el.value === 'write') && el.checked) {
+        full.checked = false;
+      }
+      const anyChecked = [full, read, write].some(i => i.checked);
+      if (!anyChecked) read.checked = true;
+    });
+  });
 });
 
 function _openProfileModal(profile = null) {
@@ -511,14 +639,20 @@ function _openProfileModal(profile = null) {
   _activeGroup     = "ALL";
   document.querySelectorAll(".pf-grp-btn").forEach(b => b.classList.toggle("active", b.dataset.group === "ALL"));
 
-  nameEl.value = isEdit ? profile.profile_name : "";
+  nameEl.value = isEdit ? _profileName(profile) : "";
   nameEl.disabled = isEdit;
-  nameEl.dataset.editName = isEdit ? profile.profile_name : "";
+  nameEl.dataset.editName = isEdit ? _profileName(profile) : "";
   document.getElementById("pf-mode").value = isEdit ? "edit" : "create";
-  document.getElementById("profile-modal-title").textContent = isEdit ? `Edit Profile - ${profile.profile_name}` : "New Profile";
+  document.getElementById("profile-modal-title").textContent = isEdit ? `Edit Profile - ${_profileName(profile)}` : "New Profile";
   document.getElementById("btn-save-profile").textContent = isEdit ? "Update" : "Save";
+  document.getElementById('pf-description').value = isEdit ? (profile.description || '') : '';
 
-  const selected = new Set(isEdit ? profile.signals : []);
+  const selectedPerm = new Set(isEdit ? _profilePermission(profile) : ['read']);
+  document.querySelectorAll('#pf-permission input').forEach(i => {
+    i.checked = selectedPerm.has(i.value) || (i.value === 'read' && selectedPerm.size === 0);
+  });
+
+  const selected = new Set(isEdit ? _profileSignals(profile) : []);
   App.signalsMeta.forEach(s => {
     const label = document.createElement("label");
     label.className = "check-item";
@@ -554,11 +688,18 @@ function _closeProfileModal() {
 
 // ── Configs ───────────────────────────────────────────────────────────────────
 async function _loadConfigs() {
-  const [infoRes, configRes] = await Promise.all([
-    API.getConfigs(),
-    API.getConfig(),
-  ]);
-  _renderConfigsPanel(infoRes, configRes);
+  try {
+    const [infoRes, configRes] = await Promise.all([
+      API.getConfigs(),
+      API.getConfig(),
+    ]);
+    _renderConfigsPanel(infoRes, configRes);
+  } catch (e) {
+    const container = document.getElementById("configs-list");
+    if (container) {
+      container.innerHTML = `<div class="section-id-bar"><span>Config unavailable:</span><strong>${_escHtml(e.message)}</strong></div>`;
+    }
+  }
 }
 
 function _renderConfigsPanel(infoRes, configRes) {

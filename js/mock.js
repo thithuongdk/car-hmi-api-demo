@@ -12,6 +12,16 @@ let _INFO_DATA = null;    // populated from data/info.json
 let _CONFIG_DATA = null;  // populated from data/config.json
 let _SIGNALS_BY_NAME = new Map();
 let _SIGNALS_BY_STD_NAME = new Map();
+const _CLIENT_ID_KEY = 'car_hmi_client_id';
+
+function _getClientId() {
+  let id = localStorage.getItem(_CLIENT_ID_KEY);
+  if (!id) {
+    id = `client-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(_CLIENT_ID_KEY, id);
+  }
+  return id;
+}
 
 function _rebuildSignalLookups() {
   _SIGNALS_BY_NAME = new Map(_SIGNALS_META.map(s => [s.name, s]));
@@ -159,6 +169,7 @@ const Store = (() => {
     return {
       section_id: 1,
       profiles:     base,
+      profile_sessions: {},
       configs:      JSON.parse(JSON.stringify(_DEFAULT_CONFIGS)),
       signals_meta: JSON.parse(JSON.stringify(_SIGNALS_META)),
       signal_values: vals,
@@ -269,7 +280,23 @@ const MockAPI = {
   async getProfiles() {
     await delay();
     const d = Store.get();
-    const res = { section_id: d.section_id, profiles: d.profiles };
+    const active = d.profiles.find(p => p.selected)?.profile_name || d.profiles[0]?.profile_name || null;
+    const res = {
+      section_id: d.section_id,
+      profiles: d.profiles.map(p => ({
+        name: p.profile_name,
+        profile_name: p.profile_name,
+        signals: p.signals || [],
+        permission: Array.isArray(p.permission) && p.permission.length ? p.permission : ['read'],
+        description: p.description || '',
+        section_id: String(d.section_id).padStart(12, '0').slice(-12),
+        selected: !!p.selected,
+      })),
+      active,
+      global_active: active,
+      total: d.profiles.length,
+      client_id: _getClientId(),
+    };
     Log.api("GET", "/api/profiles", null, res);
     return res;
   },
@@ -278,44 +305,79 @@ const MockAPI = {
   async getProfile(name) {
     await delay();
     const d = Store.get();
-    const p = name ? d.profiles.find(p => p.profile_name === name) : d.profiles.find(p => p.selected);
+    const p = name ? d.profiles.find(p => p.profile_name === name || p.name === name) : d.profiles.find(p => p.selected);
     if (!p) { Log.api("GET", `/api/profile?name=${name}`, null, { error: "Not found" }, 404); throw new Error("Profile not found"); }
-    Log.api("GET", `/api/profile?name=${name || "(active)"}`, null, { section_id: d.section_id, ...p });
-    return { section_id: d.section_id, ...p };
+    const out = {
+      name: p.profile_name,
+      profile_name: p.profile_name,
+      signals: p.signals || [],
+      permission: Array.isArray(p.permission) && p.permission.length ? p.permission : ['read'],
+      description: p.description || '',
+      section_id: String(d.section_id).padStart(12, '0').slice(-12),
+      selected: !!p.selected,
+    };
+    Log.api("GET", `/api/profile?name=${name || "(active)"}`, null, out);
+    return out;
   },
 
   /** POST /api/profile */
   async createProfile(payload) {
     await delay();
     const d = Store.get();
-    if (d.profiles.find(p => p.profile_name === payload.profile_name)) {
-      Log.api("POST", "/api/profile", payload, { error: "Profile name already exists" }, 409);
-      throw new Error("Profile '" + payload.profile_name + "' already exists");
+    const profileName = (payload?.name || payload?.profile_name || '').trim();
+    if (!profileName) {
+      Log.api("POST", "/api/profile", payload, { error: "name is required" }, 400);
+      throw new Error("name is required");
     }
-    const np = { profile_name: payload.profile_name, signals: payload.signals || [], selected: false };
+    if (d.profiles.find(p => p.profile_name === profileName)) {
+      Log.api("POST", "/api/profile", payload, { error: "Profile name already exists" }, 409);
+      throw new Error("Profile '" + profileName + "' already exists");
+    }
+    const permission = Array.isArray(payload?.permission) && payload.permission.length ? payload.permission : ['read'];
+    const np = {
+      profile_name: profileName,
+      name: profileName,
+      signals: payload.signals || [],
+      permission: permission.includes('full') ? ['full'] : permission,
+      description: payload?.description || '',
+      selected: false,
+    };
     d.profiles.push(np);
+    if (!d.profiles.some(p => p.selected)) np.selected = true;
     d.section_id++;
     Store.save();
-    Log.api("POST", "/api/profile", payload, np, 201);
-    return np;
+    const out = { ...np, section_id: String(d.section_id).padStart(12, '0').slice(-12) };
+    Log.api("POST", "/api/profile", payload, out, 201);
+    return out;
   },
 
   /** PUT /api/profile  (section_id must match) */
   async updateProfile(payload) {
     await delay();
     const d = Store.get();
-    if (payload.section_id !== d.section_id) {
-      const err = { error: `section_id mismatch: expected ${d.section_id}, got ${payload.section_id}` };
+    const expected = String(d.section_id).padStart(12, '0').slice(-12);
+    const given = String(payload.section_id || '');
+    if (given && given !== expected) {
+      const err = { error: `section_id mismatch: expected ${expected}, got ${given}` };
       Log.api("PUT", "/api/profile", payload, err, 409);
       throw new Error(err.error);
     }
-    const idx = d.profiles.findIndex(p => p.profile_name === payload.profile_name);
+    const profileName = (payload?.name || payload?.profile_name || '').trim();
+    const idx = d.profiles.findIndex(p => p.profile_name === profileName);
     if (idx < 0) throw new Error("Profile not found");
-    d.profiles[idx] = { ...d.profiles[idx], ...payload };
+    d.profiles[idx] = {
+      ...d.profiles[idx],
+      signals: Array.isArray(payload.signals) ? payload.signals : d.profiles[idx].signals,
+      description: payload.description !== undefined ? payload.description : d.profiles[idx].description,
+      permission: Array.isArray(payload.permission) && payload.permission.length
+        ? (payload.permission.includes('full') ? ['full'] : payload.permission)
+        : d.profiles[idx].permission,
+    };
     d.section_id++;
     Store.save();
-    Log.api("PUT", "/api/profile", payload, d.profiles[idx]);
-    return d.profiles[idx];
+    const out = { ...d.profiles[idx], section_id: String(d.section_id).padStart(12, '0').slice(-12) };
+    Log.api("PUT", "/api/profile", payload, out);
+    return out;
   },
 
   /** DELETE /api/profile/:name */
@@ -324,20 +386,100 @@ const MockAPI = {
     const d = Store.get();
     const idx = d.profiles.findIndex(p => p.profile_name === name);
     if (idx < 0) { Log.api("DELETE", `/api/profile/${name}`, null, { error: "Not found" }, 404); throw new Error("Not found"); }
-    const removed = d.profiles.splice(idx, 1)[0];
+    d.profiles.splice(idx, 1);
     d.section_id++;
+    if (!d.profiles.some(p => p.selected) && d.profiles[0]) d.profiles[0].selected = true;
     Store.save();
-    Log.api("DELETE", `/api/profile/${name}`, null, { deleted: name, section_id: d.section_id });
-    return removed;
+    Log.api("DELETE", `/api/profile/${name}`, null, null, 204);
+    return null;
   },
 
   /** Mark one profile as selected (active) */
   async selectProfile(name) {
     await delay(40);
     const d = Store.get();
+    const found = d.profiles.find(p => p.profile_name === name || p.name === name);
+    if (!found) {
+      Log.api("PUT", "/api/profile/active", { name }, { error: 'Profile not found' }, 404);
+      throw new Error('Profile not found');
+    }
     d.profiles.forEach(p => { p.selected = (p.profile_name === name); });
     Store.save();
-    Log.api("PUT", "/api/profile", { profile_name: name, selected: true, section_id: d.section_id }, { ok: true });
+    localStorage.setItem('car_hmi_profile_name', name);
+    const out = { active: name, global_active: name, client_id: _getClientId(), warnings: [] };
+    Log.api("PUT", "/api/profile/active", { name }, out, 200);
+    return out;
+  },
+
+  async getProfileSessions() {
+    await delay();
+    const d = Store.get();
+    const now = Date.now() / 1000;
+    const sessionsMap = d.profile_sessions || {};
+    const sessions = Object.entries(sessionsMap).map(([client_id, st]) => {
+      const lastSeen = Number(st.last_seen || st.updated_at || 0);
+      const online = (now - lastSeen) <= 600;
+      return {
+        client_id,
+        active: st.active,
+        updated_at: Number(st.updated_at || 0),
+        last_seen: lastSeen,
+        status: online ? 'online' : 'offline',
+      };
+    });
+    const online_total = sessions.filter(s => s.status === 'online').length;
+    const offline_total = sessions.length - online_total;
+    const by_profile_map = {};
+    sessions.forEach(s => {
+      if (!by_profile_map[s.active]) by_profile_map[s.active] = { profile_name: s.active, total: 0, online: 0, offline: 0 };
+      by_profile_map[s.active].total += 1;
+      by_profile_map[s.active][s.status] += 1;
+    });
+    const out = {
+      sessions,
+      total: sessions.length,
+      online_total,
+      offline_total,
+      by_profile: Object.values(by_profile_map),
+      global_active: d.profiles.find(p => p.selected)?.profile_name || null,
+      ttl_seconds: 600,
+      server_time: now,
+    };
+    Log.api('GET', '/api/profile/sessions', null, out, 200);
+    return out;
+  },
+
+  async heartbeatProfile() {
+    await delay(20);
+    const d = Store.get();
+    if (!d.profile_sessions) d.profile_sessions = {};
+    const cid = _getClientId();
+    const now = Date.now() / 1000;
+    const active = localStorage.getItem('car_hmi_profile_name') || d.profiles.find(p => p.selected)?.profile_name || null;
+    d.profile_sessions[cid] = { active, updated_at: now, last_seen: now };
+    Store.save();
+    const out = { client_id: cid, active, last_seen: now, ttl_seconds: 600 };
+    Log.api('POST', '/api/profile/heartbeat', {}, out, 200);
+    return out;
+  },
+
+  async setProfileOffline() {
+    await delay(20);
+    const d = Store.get();
+    if (!d.profile_sessions) d.profile_sessions = {};
+    const cid = _getClientId();
+    const now = Date.now() / 1000;
+    const cur = d.profile_sessions[cid] || {};
+    d.profile_sessions[cid] = {
+      ...cur,
+      active: cur.active || localStorage.getItem('car_hmi_profile_name') || d.profiles.find(p => p.selected)?.profile_name || null,
+      updated_at: now,
+      last_seen: now - 601,
+    };
+    Store.save();
+    const out = { client_id: cid, active: d.profile_sessions[cid].active, last_seen: d.profile_sessions[cid].last_seen, ttl_seconds: 600 };
+    Log.api('POST', '/api/profile/offline', {}, out, 200);
+    return out;
   },
 
   // ── Configs ────────────────────────────────────────────────────────────────

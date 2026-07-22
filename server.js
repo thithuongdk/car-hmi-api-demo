@@ -66,6 +66,7 @@ function parseCan0Signals(can0) {
       signals.push({
         name:        sigName,
         std_name:    SIGNAL_STD_JSON[sigName] || sigName,
+        tag:         Array.isArray(sig.tag) ? sig.tag.map(String) : null,
         unit:        sig.unit        || '',
         min:         sig.minimum     ?? 0,
         max:         sig.maximum     ?? 0,
@@ -916,6 +917,7 @@ app.get('/signals', (req, res) => {
     const item = {
       signal_name: name,
       std_name: SIGNALS_BY_NAME.get(name)?.std_name || name,
+      tag: null,
       value: sv.value,
       unit: SIGNALS_BY_NAME.get(name)?.unit || null,
       timestamp: sv.timestamp,
@@ -961,7 +963,7 @@ app.get('/signals/available', (req, res) => {
     return {
       signal_name: s.name,
       std_name: s.std_name || s.name,
-      tag: null,
+      tag: Array.isArray(s.tag) ? s.tag : null,
       unit: s.unit || null,
       min_value: s.min,
       max_value: s.max,
@@ -1001,6 +1003,7 @@ app.get('/signals/:name', (req, res) => {
     signal_name: meta.name,
     name: meta.name,
     std_name: meta.std_name || meta.name,
+    tag: null,
     value: sv?.value ?? 0,
     timestamp: sv?.timestamp ?? null,
     unit: meta.unit,
@@ -1021,6 +1024,7 @@ app.get('/signals/:name/history', (req, res) => {
   const sv = signalValues[meta.name];
   const item = {
     signal_name: meta.name,
+    tag: null,
     value: sv?.value ?? 0,
     unit: meta.unit || null,
     timestamp: sv?.timestamp ?? Date.now() / 1000,

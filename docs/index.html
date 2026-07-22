@@ -288,10 +288,10 @@ window.onload = function () {
                   schema: { $ref: "#/components/schemas/SignalsSnapshot" },
                   example: {
                     items: [
-                      { signal_name: "ARS_FL_InjuryRiskAdaptive",    std_name: "ARS_FL_InjuryRiskAdaptive",  value: 23,   unit: "", timestamp: 1717243200.123 },
-                      { signal_name: "OMS_FL_HandsOnWheel",          std_name: "OMS_FL_HandsOnWheel",        value: 3,    unit: "", timestamp: 1717243200.123 },
-                      { signal_name: "OMS_FL_OccupantWeightMean_kg", std_name: "OMS_FL_OccupantWeightMean",  value: 72,   unit: "", timestamp: 1717243200.123 },
-                      { signal_name: "ACR_FL_RetractRequest",        std_name: "ACR_FL_RetractRequest",      value: 0,    unit: "", timestamp: 1717243200.123 }
+                      { signal_name: "ARS_FL_InjuryRiskAdaptive",    std_name: "ARS_FL_InjuryRiskAdaptive",  tag: null, value: 23,   unit: "", timestamp: 1717243200.123 },
+                      { signal_name: "OMS_FL_HandsOnWheel",          std_name: "OMS_FL_HandsOnWheel",        tag: null, value: 3,    unit: "", timestamp: 1717243200.123 },
+                      { signal_name: "OMS_FL_OccupantWeightMean_kg", std_name: "OMS_FL_OccupantWeightMean",  tag: null, value: 72,   unit: "", timestamp: 1717243200.123 },
+                      { signal_name: "ACR_FL_RetractRequest",        std_name: "ACR_FL_RetractRequest",      tag: null, value: 0,    unit: "", timestamp: 1717243200.123 }
                     ],
                     total: 4,
                     warnings: []
@@ -316,7 +316,7 @@ window.onload = function () {
                   schema: { $ref: "#/components/schemas/SignalsAvailableResponse" },
                   example: {
                     signals_info: [
-                      { signal_name: "ARS_FL_InjuryRiskAdaptive", std_name: "ARS_FL_InjuryRiskAdaptive", unit: "", min_value: 0, max_value: 100, writable: false, states: [], group_name: null, widget_type: null, value: 23, status: "ok", timestamp: 1717243200.123 }
+                      { signal_name: "ARS_FL_InjuryRiskAdaptive", std_name: "ARS_FL_InjuryRiskAdaptive", tag: null, unit: "", min_value: 0, max_value: 100, writable: false, states: [], group_name: null, widget_type: null, value: 23, status: "ok", timestamp: 1717243200.123 }
                     ],
                     total: 236,
                     warnings: []
@@ -619,6 +619,7 @@ window.onload = function () {
           properties: {
             signal_name: { type: "string", example: "ARS_FL_InjuryRiskAdaptive" },
             std_name:  { type: "string", example: "ARS_FL_InjuryRiskAdaptive", description: "Standardized name alias from signal_std_name.json" },
+            tag:       { type: "string", nullable: true, example: null },
             value:     { type: "number", example: 3000 },
             unit:      { type: "string", nullable: true, example: "rpm" },
             timestamp: { type: "number", description: "Unix epoch seconds", example: 1717243200.123 }
@@ -653,6 +654,7 @@ window.onload = function () {
             signal_name: { type: "string" },
             name: { type: "string" },
             std_name: { type: "string" },
+            tag: { type: "string", nullable: true },
             value: { type: "number" },
             timestamp: { type: "number", nullable: true },
             unit: { type: "string", nullable: true },

@@ -71,6 +71,7 @@ function _parseCan0Signals(can0) {
       signals.push({
         name:        sigName,
         std_name:    _SIGNAL_STD_MAP[sigName] || sigName,
+        tag:         Array.isArray(sig.tag) ? sig.tag.map(String) : null,
         unit:        sig.unit        || '',
         min:         sig.minimum     ?? 0,
         max:         sig.maximum     ?? 0,
@@ -561,6 +562,7 @@ const MockAPI = {
     const items = Object.entries(d.signal_values).map(([name, sv]) => ({
       signal_name: name,
       std_name: _SIGNALS_BY_NAME.get(name)?.std_name || name,
+      tag: null,
       value: sv.value,
       unit: _SIGNALS_BY_NAME.get(name)?.unit || null,
       timestamp: sv.timestamp,
@@ -582,7 +584,9 @@ const MockAPI = {
     const sv = d.signal_values[meta.name];
     const res = {
       name: meta.name,
+      signal_name: meta.name,
       std_name: meta.std_name || meta.name,
+      tag: null,
       value: sv?.value ?? 0,
       timestamp: sv?.timestamp ?? null,
       unit: meta.unit,
@@ -602,7 +606,13 @@ const MockAPI = {
     const d = Store.get();
     const signals_info = d.signals_meta.map(s => {
       const sv = d.signal_values[s.name];
-      return { ...s, value: sv ? sv.value : null, timestamp: sv ? sv.timestamp : null };
+      return {
+        ...s,
+        signal_name: s.name,
+        tag: Array.isArray(s.tag) ? s.tag : null,
+        value: sv ? sv.value : null,
+        timestamp: sv ? sv.timestamp : null,
+      };
     });
     const res = { signals_info };
     Log.api("GET", "/signals/available", null, res);

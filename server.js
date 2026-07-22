@@ -406,7 +406,6 @@ app.get('/api/info', (req, res) => {
 function profileResponse(name, profile) {
   return {
     name,
-    profile_name: name,
     signals: profile.signals || [],
     permission: toPermissionList(profile.permission),
     description: profile.description || null,
@@ -424,7 +423,6 @@ app.get('/api/profiles', (req, res) => {
     active,
     global_active: profilesState.active,
     client_id: clientId,
-    section_id: sectionId,
   });
 });
 
@@ -909,7 +907,6 @@ app.get('/signals', (req, res) => {
   const warnings = [];
   const skipped = [];
   const items = [];
-  const legacySignals = [];
   for (const [name, sv] of Object.entries(signalValues)) {
     const canRead = profileAllowsSignal(profile, name);
     if (!canRead) {
@@ -924,7 +921,6 @@ app.get('/signals', (req, res) => {
       timestamp: sv.timestamp,
     };
     items.push(item);
-    legacySignals.push({ name: item.signal_name, std_name: item.std_name, value: item.value, timestamp: item.timestamp });
   }
   if (skipped.length) {
     warnings.push(buildAccessWarning('profile_signal_filtered', `Skipped ${skipped.length} signal(s) outside profile '${resolvedName}' scope`, {
@@ -933,7 +929,7 @@ app.get('/signals', (req, res) => {
       signals: skipped.sort(),
     }));
   }
-  res.json({ items, total: items.length, warnings, timestamp: new Date().toISOString(), signals: legacySignals });
+  res.json({ items, total: items.length, warnings });
 });
 
 app.get('/signals/available', (req, res) => {

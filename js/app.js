@@ -438,7 +438,7 @@ function _normalizeProfilesResponse(res) {
     activeName: res?.active || active?.name || null,
     globalActive: res?.global_active || null,
     total: res?.total ?? profiles.length,
-    sectionId: res?.section_id ?? App.sectionId,
+    sectionId: res?.section_id ?? active?.section_id ?? profiles[0]?.section_id ?? App.sectionId,
   };
 }
 

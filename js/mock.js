@@ -282,15 +282,12 @@ const MockAPI = {
     const d = Store.get();
     const active = d.profiles.find(p => p.selected)?.profile_name || d.profiles[0]?.profile_name || null;
     const res = {
-      section_id: d.section_id,
       profiles: d.profiles.map(p => ({
         name: p.profile_name,
-        profile_name: p.profile_name,
         signals: p.signals || [],
         permission: Array.isArray(p.permission) && p.permission.length ? p.permission : ['read'],
         description: p.description || '',
         section_id: String(d.section_id).padStart(12, '0').slice(-12),
-        selected: !!p.selected,
       })),
       active,
       global_active: active,
@@ -309,12 +306,10 @@ const MockAPI = {
     if (!p) { Log.api("GET", `/api/profile?name=${name}`, null, { error: "Not found" }, 404); throw new Error("Profile not found"); }
     const out = {
       name: p.profile_name,
-      profile_name: p.profile_name,
       signals: p.signals || [],
       permission: Array.isArray(p.permission) && p.permission.length ? p.permission : ['read'],
       description: p.description || '',
       section_id: String(d.section_id).padStart(12, '0').slice(-12),
-      selected: !!p.selected,
     };
     Log.api("GET", `/api/profile?name=${name || "(active)"}`, null, out);
     return out;
@@ -563,13 +558,14 @@ const MockAPI = {
   async getSignals() {
     await delay();
     const d = Store.get();
-    const signals = Object.entries(d.signal_values).map(([name, sv]) => ({
-      name,
+    const items = Object.entries(d.signal_values).map(([name, sv]) => ({
+      signal_name: name,
       std_name: _SIGNALS_BY_NAME.get(name)?.std_name || name,
       value: sv.value,
+      unit: _SIGNALS_BY_NAME.get(name)?.unit || null,
       timestamp: sv.timestamp,
     }));
-    const res = { timestamp: new Date().toISOString(), signals };
+    const res = { items, total: items.length, warnings: [] };
     Log.api("GET", "/signals", null, res);
     return res;
   },

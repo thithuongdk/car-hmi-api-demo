@@ -60,7 +60,7 @@ GET    /config                    — editable config snapshot
 PUT    /config                    — update config (section_id required)
 
 # Signals
-GET    /signals                   — snapshot current values (includes `std_name`)
+GET    /signals                   — snapshot current values (`items`, `total`, `warnings`)
 GET    /signals/{signal_name}     — single signal: value + metadata (unit, min, max, writable, states)
 GET    /signals/available         — full metadata (unit, min, max, writable, states, std_name)
 PUT    /signals/{signal_name}     — write single writable signal → 202 + WS broadcast
@@ -74,7 +74,7 @@ GET    /api/restraints/match      — match best restraint video by query (weigh
 GET    /api/restraints/video/:filename — stream matched video file from media/
 ```
 
-> **Signal Alias (`std_name`):** Mọi API endpoint (REST write, batch update, WebSocket subscribe/unsubscribe) đều chấp nhận cả `name` (signal_name gốc trong CAN DB) **và** `std_name` (tên chuẩn hóa từ `data/signal_std_name.json`). Response luôn trả về cả hai trường `name` + `std_name` trong payload signal.
+> **Signal Alias (`std_name`):** Mọi API endpoint (REST write, batch update, WebSocket subscribe/unsubscribe) đều chấp nhận cả `name` (signal_name gốc trong CAN DB) **và** `std_name` (tên chuẩn hóa từ `data/signal_std_name.json`). Response signals trả về `signal_name` + `std_name` ở REST snapshot và `name` + `std_name` ở WS frame.
 
 ## WebSocket Subscription Protocol
 
@@ -97,12 +97,23 @@ ws.send(JSON.stringify({ type: 'ping' }));
 // ← { type: 'pong' }
 ```
 
-**Signal frame format** (REST + WS):
+**Signal frame format** (WS):
 ```json
 {
   "name": "OMS_FL_OccupantWeightMean_kg",
   "std_name": "OMS_FL_OccupantWeightMean",
   "value": 72,
+  "timestamp": 1717243200.123
+}
+```
+
+**Signals snapshot item** (`GET /signals`):
+```json
+{
+  "signal_name": "OMS_FL_OccupantWeightMean_kg",
+  "std_name": "OMS_FL_OccupantWeightMean",
+  "value": 72,
+  "unit": "",
   "timestamp": 1717243200.123
 }
 ```
@@ -118,6 +129,7 @@ ws.send(JSON.stringify({ type: 'ping' }));
 - Mỗi `PUT /api/profile` và `PUT /config` phải gửi `section_id` khớp với giá trị hiện tại.
 - BE sẽ tăng `section_id` sau mỗi write thành công.
 - Nếu không khớp → **409 Conflict** (xem API Log để debug).
+- Với profile flow, lấy `section_id` từ `GET /api/profile` (hoặc từ từng phần tử trong `GET /api/profiles`).
 
 ## Deploy
 

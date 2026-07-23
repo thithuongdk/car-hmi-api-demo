@@ -199,6 +199,73 @@ window.onload = function () {
           }
         }
       },
+      "/api/profile/active": {
+        put: {
+          tags: ["Profiles"],
+          summary: "Set active profile (global or per-client)",
+          description: "With `X-Client-Id`, updates that client session only. Without it, updates global active profile.",
+          operationId: "setActiveProfile",
+          parameters: [
+            { name: "X-Client-Id", in: "header", required: false, schema: { type: "string" }, description: "Client session identifier" }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ProfileSetActiveRequest" },
+                example: { name: "U0" }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Updated", content: { "application/json": { schema: { $ref: "#/components/schemas/ActiveProfileResponse" } } } },
+            "400": { description: "Invalid request", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "404": { description: "Profile not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
+          }
+        }
+      },
+      "/api/profile/sessions": {
+        get: {
+          tags: ["Profiles"],
+          summary: "List profile sessions",
+          description: "Returns client -> active profile sessions with online/offline status based on TTL.",
+          operationId: "getProfileSessions",
+          responses: {
+            "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/ProfileSessionsResponse" } } } },
+            "403": { description: "Permission denied", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
+          }
+        }
+      },
+      "/api/profile/heartbeat": {
+        post: {
+          tags: ["Profiles"],
+          summary: "Update client heartbeat",
+          description: "Refreshes session `last_seen` and keeps client online. Requires `X-Client-Id` header.",
+          operationId: "profileHeartbeat",
+          parameters: [
+            { name: "X-Client-Id", in: "header", required: true, schema: { type: "string" }, description: "Client session identifier" }
+          ],
+          responses: {
+            "200": { description: "Updated", content: { "application/json": { schema: { $ref: "#/components/schemas/ProfileHeartbeatResponse" } } } },
+            "400": { description: "Missing client id", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
+          }
+        }
+      },
+      "/api/profile/offline": {
+        post: {
+          tags: ["Profiles"],
+          summary: "Mark client offline",
+          description: "Marks client session offline immediately by forcing `last_seen` to an expired value. Requires `X-Client-Id` header.",
+          operationId: "profileOffline",
+          parameters: [
+            { name: "X-Client-Id", in: "header", required: true, schema: { type: "string" }, description: "Client session identifier" }
+          ],
+          responses: {
+            "200": { description: "Updated", content: { "application/json": { schema: { $ref: "#/components/schemas/ProfileHeartbeatResponse" } } } },
+            "400": { description: "Missing client id", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
+          }
+        }
+      },
       "/configs": {
         get: {
           tags: ["Config"],
@@ -519,6 +586,63 @@ window.onload = function () {
             active:        { type: "string", nullable: true, example: "U0" },
             global_active: { type: "string", nullable: true, example: "U0" },
             client_id:     { type: "string", nullable: true, example: "client-abc123" }
+          }
+        },
+        ProfileSetActiveRequest: {
+          type: "object",
+          required: ["name"],
+          properties: {
+            name: { type: "string", example: "U0" }
+          }
+        },
+        ActiveProfileResponse: {
+          type: "object",
+          properties: {
+            active: { type: "string", example: "U0" },
+            global_active: { type: "string", nullable: true, example: "U0" },
+            client_id: { type: "string", nullable: true, example: "client-abc123" },
+            warnings: { type: "array", items: { type: "object", additionalProperties: true } }
+          }
+        },
+        ClientProfileSession: {
+          type: "object",
+          properties: {
+            client_id: { type: "string", example: "client-abc123" },
+            active: { type: "string", example: "U0" },
+            updated_at: { type: "number", example: 1720000000.0 },
+            last_seen: { type: "number", example: 1720000030.0 },
+            status: { type: "string", enum: ["online", "offline"], example: "online" }
+          }
+        },
+        ProfileSessionProfileStat: {
+          type: "object",
+          properties: {
+            profile_name: { type: "string", example: "U0" },
+            total: { type: "integer", example: 2 },
+            online: { type: "integer", example: 1 },
+            offline: { type: "integer", example: 1 }
+          }
+        },
+        ProfileSessionsResponse: {
+          type: "object",
+          properties: {
+            sessions: { type: "array", items: { $ref: "#/components/schemas/ClientProfileSession" } },
+            total: { type: "integer", example: 1 },
+            online_total: { type: "integer", example: 1 },
+            offline_total: { type: "integer", example: 0 },
+            by_profile: { type: "array", items: { $ref: "#/components/schemas/ProfileSessionProfileStat" } },
+            global_active: { type: "string", nullable: true, example: "U0" },
+            ttl_seconds: { type: "integer", example: 600 },
+            server_time: { type: "number", example: 1720000035.0 }
+          }
+        },
+        ProfileHeartbeatResponse: {
+          type: "object",
+          properties: {
+            client_id: { type: "string", example: "client-abc123" },
+            active: { type: "string", nullable: true, example: "U0" },
+            last_seen: { type: "number", example: 1720000030.0 },
+            ttl_seconds: { type: "integer", example: 600 }
           }
         },
         ProfileCreate: {

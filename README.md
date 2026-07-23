@@ -53,6 +53,10 @@ GET    /api/profile?name=X        — get one profile
 POST   /api/profile               — create profile
 PUT    /api/profile               — update profile (section_id required)
 DELETE /api/profile/{name}        — delete profile → 204
+PUT    /api/profile/active        — set active profile (global or per-client when X-Client-Id is present)
+GET    /api/profile/sessions      — list client sessions with online/offline status
+POST   /api/profile/heartbeat     — refresh session heartbeat (requires X-Client-Id)
+POST   /api/profile/offline       — mark session offline immediately (requires X-Client-Id)
 
 # Config
 GET    /configs                   — full system info (read-only)

@@ -584,12 +584,28 @@ document.addEventListener("DOMContentLoaded", () => {
     if (permission.includes('full')) permission = ['full'];
     const signals = selectedSignals.map((name) => ({ name, permission }));
     const description = (document.getElementById('pf-description').value || '').trim();
+    const exinfoText = (document.getElementById('pf-exinfo').value || '').trim();
+    let exinfo;
+    if (exinfoText) {
+      try {
+        exinfo = JSON.parse(exinfoText);
+      } catch (_) {
+        return alert('Exinfo must be valid JSON');
+      }
+      if (!exinfo || typeof exinfo !== 'object' || Array.isArray(exinfo)) {
+        return alert('Exinfo must be a JSON object');
+      }
+    }
     if (!name) return alert("Profile name required");
     try {
       if (mode === "edit") {
-        await API.updateProfile({ name, signals, description, section_id: String(App.sectionId).padStart(12, '0').slice(-12) });
+        const payload = { name, signals, description, section_id: String(App.sectionId).padStart(12, '0').slice(-12) };
+        if (exinfo !== undefined) payload.exinfo = exinfo;
+        await API.updateProfile(payload);
       } else {
-        await API.createProfile({ name, signals, description });
+        const payload = { name, signals, description };
+        if (exinfo !== undefined) payload.exinfo = exinfo;
+        await API.createProfile(payload);
       }
       _closeProfileModal();
       await _loadProfiles();
@@ -667,6 +683,7 @@ function _openProfileModal(profile = null) {
   document.getElementById("profile-modal-title").textContent = isEdit ? `Edit Profile - ${_profileName(profile)}` : "New Profile";
   document.getElementById("btn-save-profile").textContent = isEdit ? "Update" : "Save";
   document.getElementById('pf-description').value = isEdit ? (profile.description || '') : '';
+  document.getElementById('pf-exinfo').value = isEdit && profile.exinfo ? JSON.stringify(profile.exinfo, null, 2) : '';
 
   const selectedPerm = new Set(isEdit ? _profilePermission(profile) : ['read']);
   document.querySelectorAll('#pf-permission input').forEach(i => {

@@ -70,9 +70,10 @@ function _normalizeProfileSignals(rawSignals, fallbackPermission = ['read']) {
   const list = Array.isArray(rawSignals) ? rawSignals : [];
   const merged = new Map();
   list.forEach((item) => {
-    if (!item || typeof item !== 'object') return;
-    const name = String(item.name || '').trim();
-    const permission = _normalizePermissionList(item.permission || fallbackPermission);
+    const entry = typeof item === 'string' ? { name: item, permission: fallbackPermission } : item;
+    if (!entry || typeof entry !== 'object') return;
+    const name = String(entry.name || '').trim();
+    const permission = _normalizePermissionList(entry.permission || fallbackPermission);
     if (!name) return;
     if (merged.has(name)) {
       merged.set(name, _normalizePermissionList([...(merged.get(name) || []), ...permission]));
@@ -81,6 +82,11 @@ function _normalizeProfileSignals(rawSignals, fallbackPermission = ['read']) {
     }
   });
   return Array.from(merged.entries()).map(([name, permission]) => ({ name, permission }));
+}
+
+function _normalizeProfileExinfo(rawExinfo) {
+  if (!rawExinfo || typeof rawExinfo !== 'object' || Array.isArray(rawExinfo)) return {};
+  return JSON.parse(JSON.stringify(rawExinfo));
 }
 
 function _profileSignals(profile) {
@@ -316,6 +322,7 @@ const MockAPI = {
       profiles: d.profiles.map(p => ({
         name: p.profile_name,
         signals: _profileSignals(p),
+        exinfo: _normalizeProfileExinfo(p.exinfo),
         description: p.description || '',
         section_id: String(d.section_id).padStart(12, '0').slice(-12),
       })),
@@ -337,6 +344,7 @@ const MockAPI = {
     const out = {
       name: p.profile_name,
       signals: _profileSignals(p),
+      exinfo: _normalizeProfileExinfo(p.exinfo),
       description: p.description || '',
       section_id: String(d.section_id).padStart(12, '0').slice(-12),
     };
@@ -361,6 +369,7 @@ const MockAPI = {
       profile_name: profileName,
       name: profileName,
       signals: _normalizeProfileSignals(payload.signals),
+      exinfo: _normalizeProfileExinfo(payload.exinfo),
       description: payload?.description || '',
       selected: false,
     };
@@ -392,6 +401,7 @@ const MockAPI = {
       signals: Array.isArray(payload.signals)
         ? _normalizeProfileSignals(payload.signals)
         : d.profiles[idx].signals,
+      exinfo: payload.exinfo !== undefined ? _normalizeProfileExinfo(payload.exinfo) : d.profiles[idx].exinfo,
       description: payload.description !== undefined ? payload.description : d.profiles[idx].description,
     };
     d.section_id++;

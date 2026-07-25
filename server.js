@@ -237,6 +237,11 @@ function normalizeProfileSignals(rawSignals, fallbackPermission = ['read']) {
   return out;
 }
 
+function normalizeProfileExinfo(rawExinfo) {
+  if (!rawExinfo || typeof rawExinfo !== 'object' || Array.isArray(rawExinfo)) return {};
+  return JSON.parse(JSON.stringify(rawExinfo));
+}
+
 function profileSignalEntries(profile) {
   if (!profile) return [];
   return normalizeProfileSignals(profile.signals);
@@ -258,6 +263,7 @@ function bootstrapProfilesState() {
     Object.entries(loaded).forEach(([name, p]) => {
       profilesState.profiles[name] = {
         signals: normalizeProfileSignals(p?.signals),
+        exinfo: normalizeProfileExinfo(p?.exinfo),
         description: p?.description || null,
         created_at: Number(p?.created_at || Date.now() / 1000),
       };
@@ -275,6 +281,7 @@ function bootstrapProfilesState() {
           ? p.signals.map((signalName) => ({ name: String(signalName || '').trim(), permission: ['full'] }))
           : []
       ),
+      exinfo: normalizeProfileExinfo(p?.exinfo),
       description: p.description || null,
       created_at: Date.now() / 1000,
     };
@@ -456,6 +463,7 @@ function profileResponse(name, profile) {
   return {
     name,
     signals: profileSignalEntries(profile),
+    exinfo: normalizeProfileExinfo(profile?.exinfo),
     description: profile.description || null,
     section_id: String(sectionId).padStart(12, '0').slice(-12),
   };
@@ -496,6 +504,7 @@ app.post('/api/profile', (req, res) => {
 
   profilesState.profiles[name] = {
     signals: normalizeProfileSignals(body.signals),
+    exinfo: normalizeProfileExinfo(body.exinfo),
     description: body.description || null,
     created_at: Date.now() / 1000,
   };
@@ -522,6 +531,7 @@ app.put('/api/profile', (req, res) => {
 
   p.signals = body.signals !== undefined ? normalizeProfileSignals(body.signals) : p.signals;
   p.description = body.description === undefined ? p.description : body.description;
+  if (body.exinfo !== undefined) p.exinfo = normalizeProfileExinfo(body.exinfo);
   sectionId += 1;
   res.json(profileResponse(name, p));
 });

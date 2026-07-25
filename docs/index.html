@@ -61,7 +61,7 @@ window.onload = function () {
     openapi: "3.0.3",
     info: {
       title: "CAN-HMI REST API",
-      description: "REST + WebSocket API contract for the Car HMI demo.\n\n**WebSocket realtime stream:** `wss://car-hmi-api-demo.onrender.com/ws/signals` — see [WebSocket Docs](/ws).\n\n**Signal alias (`std_name`):** REST write endpoints and WebSocket subscriptions accept canonical `name` and standardized `std_name`.\n\n**Subscribe after connect:**\n```\n{ type: 'subscribe', signals: ['HMI_CrashSeverity'] }\n{ type: 'subscribe', signals: ['*'] }\n{ type: 'ping' }  ->  { type: 'pong' }\n```\n\n**Write broadcast:** successful writes from `PUT /signals/{signal_name}` and `POST /signals/batch_update` are pushed to WebSocket subscribers.\n\n**Profile scope:** `/signals` and `/signals/available` are filtered by active profile unless `X-Dev-Mode: true` is set.",
+      description: "REST + WebSocket API contract for the Car HMI demo.\n\n**WebSocket realtime stream:** `wss://car-hmi-api-demo.onrender.com/ws/signals` — see [WebSocket Docs](/ws).\n\n**Signal alias (`std_name`):** REST write endpoints and WebSocket subscriptions accept canonical `name` and standardized `std_name`.\n\n**Profile update:** `PUT /api/profile` and `POST /api/profile` use `signals: [{ name, permission }]` (per-signal permissions only). Profiles may also carry `exinfo`, a free-form object for frontend-specific metadata.\n\n**Subscribe after connect:**\n```\n{ type: 'subscribe', signals: ['HMI_CrashSeverity'] }\n{ type: 'subscribe', signals: ['*'] }\n{ type: 'ping' }  ->  { type: 'pong' }\n```\n\n**Write broadcast:** successful writes from `PUT /signals/{signal_name}` and `POST /signals/batch_update` are pushed to WebSocket subscribers.\n\n**Profile scope:** `/signals` and `/signals/available` are filtered by active profile unless `X-Dev-Mode: true` is set.",
       version: "1.0.0",
       contact: { url: "https://car-hmi-api-demo.onrender.com" }
     },
@@ -156,7 +156,7 @@ window.onload = function () {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ProfileCreate" },
-                example: { name: "U2", signals: [{ name: "ARS_FL_InjuryRiskAdaptive", permission: ["read"] }, { name: "ACR_FL_RetractRequest", permission: ["read", "write"] }], description: "Outside view" }
+                example: { name: "U2", signals: [{ name: "ARS_FL_InjuryRiskAdaptive", permission: ["read"] }, { name: "ACR_FL_RetractRequest", permission: ["read", "write"] }], exinfo: { role: "dev", color: "#22c55e" }, description: "Outside view" }
               }
             }
           },
@@ -168,14 +168,14 @@ window.onload = function () {
         put: {
           tags: ["Profiles"],
           summary: "Update profile (optimistic lock)",
-          description: "Optional optimistic lock: if section_id is provided it must match the current server value. Request body uses signals: [{ name, permission }] and no longer accepts profile-level permission.",
+          description: "Optional optimistic lock: if section_id is provided it must match the current server value. Request body uses signals: [{ name, permission }] and optional exinfo object; profile-level permission is no longer used.",
           operationId: "updateProfile",
           requestBody: {
             required: true,
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ProfileUpdate" },
-                example: { section_id: "9ab1c2d3e4f5", name: "U0", signals: [{ name: "ARS_FL_InjuryRiskAdaptive", permission: ["full"] }, { name: "OMS_FL_HandsOnWheel", permission: ["full"] }, { name: "ACR_FL_RetractRequest", permission: ["write"] }], description: "Front seat profile" }
+                example: { section_id: "9ab1c2d3e4f5", name: "U0", signals: [{ name: "ARS_FL_InjuryRiskAdaptive", permission: ["full"] }, { name: "OMS_FL_HandsOnWheel", permission: ["full"] }, { name: "ACR_FL_RetractRequest", permission: ["write"] }], exinfo: { role: "ops" }, description: "Front seat profile" }
               }
             }
           },
@@ -567,6 +567,7 @@ window.onload = function () {
           properties: {
             name:         { type: "string",  example: "U0" },
             signals:      { type: "array", items: { $ref: "#/components/schemas/ProfileSignal" } },
+            exinfo:       { type: "object", additionalProperties: true, example: { role: "dev", color: "#22c55e" } },
             description:  { type: "string", nullable: true, example: "Front seat profile" },
             section_id:   { type: "string", example: "9ab1c2d3e4f5" }
           }
@@ -576,6 +577,7 @@ window.onload = function () {
           properties: {
             name:         { type: "string",  example: "U0" },
             signals:      { type: "array", items: { $ref: "#/components/schemas/ProfileSignal" } },
+            exinfo:       { type: "object", additionalProperties: true, example: { role: "dev", color: "#22c55e" } },
             description:  { type: "string", nullable: true, example: "Front seat profile" },
             section_id:   { type: "string", example: "9ab1c2d3e4f5" }
           }
@@ -661,6 +663,7 @@ window.onload = function () {
           properties: {
             name:         { type: "string" },
             signals:      { type: "array", items: { $ref: "#/components/schemas/ProfileSignal" } },
+            exinfo:       { type: "object", additionalProperties: true, example: { role: "dev" } },
             description:  { type: "string", nullable: true }
           }
         },
@@ -671,6 +674,7 @@ window.onload = function () {
             section_id:   { type: "string", description: "Must match the current profile section_id" },
             name:         { type: "string" },
             signals:      { type: "array", items: { $ref: "#/components/schemas/ProfileSignal" } },
+            exinfo:       { type: "object", additionalProperties: true, example: { role: "ops" } },
             description:  { type: "string", nullable: true }
           }
         },

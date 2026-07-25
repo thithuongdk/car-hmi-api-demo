@@ -214,13 +214,50 @@ function toPermissionList(raw) {
   return normalized.length ? normalized : ['read'];
 }
 
+function normalizeProfileSignals(rawSignals, fallbackPermission = ['read']) {
+  const out = [];
+  const merged = new Map();
+  const list = Array.isArray(rawSignals) ? rawSignals : [];
+
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const name = String(item.name || '').trim();
+    const permission = toPermissionList(item.permission || fallbackPermission);
+    if (!name) continue;
+    if (merged.has(name)) {
+      merged.set(name, toPermissionList([...(merged.get(name) || []), ...permission]));
+    } else {
+      merged.set(name, toPermissionList(permission));
+    }
+  }
+
+  for (const [name, permission] of merged.entries()) {
+    out.push({ name, permission });
+  }
+  return out;
+}
+
+function profileSignalEntries(profile) {
+  if (!profile) return [];
+  return normalizeProfileSignals(profile.signals);
+}
+
+function profileSignalNames(profile, required = null) {
+  return profileSignalEntries(profile)
+    .filter((entry) => {
+      if (!required) return true;
+      const perms = new Set(toPermissionList(entry.permission));
+      return perms.has('full') || perms.has(required);
+    })
+    .map((entry) => entry.name);
+}
+
 function bootstrapProfilesState() {
   if (PROFILES_JSON?.profiles && typeof PROFILES_JSON.profiles === 'object' && !Array.isArray(PROFILES_JSON.profiles)) {
     const loaded = PROFILES_JSON.profiles;
     Object.entries(loaded).forEach(([name, p]) => {
       profilesState.profiles[name] = {
-        signals: Array.isArray(p?.signals) ? [...new Set(p.signals.map(String))] : [],
-        permission: toPermissionList(p?.permission),
+        signals: normalizeProfileSignals(p?.signals),
         description: p?.description || null,
         created_at: Number(p?.created_at || Date.now() / 1000),
       };
@@ -233,8 +270,11 @@ function bootstrapProfilesState() {
     const name = p.profile_name || p.name;
     if (!name) continue;
     profilesState.profiles[name] = {
-      signals: Array.isArray(p.signals) ? [...new Set(p.signals.map(String))] : [],
-      permission: ['full'],
+      signals: normalizeProfileSignals(
+        Array.isArray(p.signals)
+          ? p.signals.map((signalName) => ({ name: String(signalName || '').trim(), permission: ['full'] }))
+          : []
+      ),
       description: p.description || null,
       created_at: Date.now() / 1000,
     };
@@ -296,16 +336,20 @@ function resolveProfileName(req) {
   return profilesState.active;
 }
 
-function profileAllowsSignal(profile, signalName) {
+function profileAllowsSignal(profile, signalName, required = 'read') {
   if (!profile) return false;
-  const allowed = new Set(profile.signals || []);
-  const stdName = SIGNALS_BY_NAME.get(signalName)?.std_name;
-  return allowed.has(signalName) || (stdName ? allowed.has(stdName) : false);
+  const stdName = SIGNALS_BY_NAME.get(signalName)?.std_name || null;
+  return profileSignalEntries(profile).some((entry) => {
+    const inScope = entry.name === signalName || (stdName && entry.name === stdName);
+    if (!inScope) return false;
+    const perms = new Set(toPermissionList(entry.permission));
+    return perms.has('full') || perms.has(required);
+  });
 }
 
 function profileHasPermission(profile, required) {
   if (!profile) return false;
-  const p = new Set(profile.permission || ['read']);
+  const p = new Set(profileSignalEntries(profile).flatMap((entry) => toPermissionList(entry.permission)));
   if (p.has('full')) return true;
   return p.has(required);
 }
@@ -334,7 +378,11 @@ function requireProfilePermission(req, res, required, opts = {}) {
     return { ok: false };
   }
 
-  if (opts.signalName && !profileAllowsSignal(profile, opts.signalName)) {
+  if (opts.signalName && !profileSignalEntries(profile).some((entry) => {
+    if (entry.name !== opts.signalName && entry.name !== SIGNALS_BY_NAME.get(opts.signalName)?.std_name) return false;
+    const perms = new Set(toPermissionList(entry.permission));
+    return perms.has('full') || perms.has(required);
+  })) {
     apiErr(res, 403, 'profile_signal_denied', `Signal '${opts.signalName}' is outside profile '${profileName}' scope`, {
       profile_name: profileName,
       required_permission: required,
@@ -407,8 +455,7 @@ app.get('/api/info', (req, res) => {
 function profileResponse(name, profile) {
   return {
     name,
-    signals: profile.signals || [],
-    permission: toPermissionList(profile.permission),
+    signals: profileSignalEntries(profile),
     description: profile.description || null,
     section_id: String(sectionId).padStart(12, '0').slice(-12),
   };
@@ -448,8 +495,7 @@ app.post('/api/profile', (req, res) => {
   if (profilesState.profiles[name]) return apiErr(res, 409, 'profile_already_exists', `Profile '${name}' da ton tai`, { profile_name: name });
 
   profilesState.profiles[name] = {
-    signals: Array.isArray(body.signals) ? [...new Set(body.signals.map(String))] : [],
-    permission: toPermissionList(body.permission),
+    signals: normalizeProfileSignals(body.signals),
     description: body.description || null,
     created_at: Date.now() / 1000,
   };
@@ -474,8 +520,7 @@ app.put('/api/profile', (req, res) => {
     return apiErr(res, 409, 'profile_section_mismatch', 'section_id khong khop - vui long GET lai profile va thu lai', { profile_name: name });
   }
 
-  p.signals = Array.isArray(body.signals) ? [...new Set(body.signals.map(String))] : p.signals;
-  if (body.permission !== undefined) p.permission = toPermissionList(body.permission);
+  p.signals = body.signals !== undefined ? normalizeProfileSignals(body.signals) : p.signals;
   p.description = body.description === undefined ? p.description : body.description;
   sectionId += 1;
   res.json(profileResponse(name, p));
@@ -601,7 +646,7 @@ app.get('/configs', (req, res) => {
   const compatProfiles = Object.entries(profilesState.profiles).map(([name, p]) => ({
     profile_name: name,
     description: p.description || '',
-    signals: p.signals || [],
+    signals: profileSignalNames(p),
     selected: name === active,
   }));
   res.json({ ...INFO_DATA, profiles: compatProfiles, section_id: sectionId });
@@ -909,7 +954,7 @@ app.get('/signals', (req, res) => {
   const skipped = [];
   const items = [];
   for (const [name, sv] of Object.entries(signalValues)) {
-    const canRead = profileAllowsSignal(profile, name);
+    const canRead = profileAllowsSignal(profile, name, 'read');
     if (!canRead) {
       skipped.push(name);
       continue;
@@ -958,7 +1003,7 @@ app.get('/signals/available', (req, res) => {
   const skipped = [];
   const signals_info = SIGNALS_META.map(s => {
     const sv = signalValues[s.name];
-    const canRead = profileAllowsSignal(profile, s.name);
+    const canRead = profileAllowsSignal(profile, s.name, 'read');
     if (!canRead) skipped.push(s.name);
     return {
       signal_name: s.name,
@@ -1068,7 +1113,7 @@ app.post('/signals/batch_update', (req, res) => {
       errors.push({ signal_name: ref, value, error: 'not_found' });
       continue;
     }
-    if (gate.profile && !profileAllowsSignal(gate.profile, meta.name)) {
+    if (gate.profile && !profileAllowsSignal(gate.profile, meta.name, 'write')) {
       skippedByScope.push(meta.name);
       continue;
     }
@@ -1540,7 +1585,7 @@ function pickSignalsByState(state, inputSignals) {
       if (!profile) {
         out.push('*');
       } else {
-        const allowed = (profile.signals || []).map(s => resolveSignalName(s)).filter(Boolean);
+        const allowed = profileSignalNames(profile, 'read').map(s => resolveSignalName(s)).filter(Boolean);
         out.push(...allowed);
         warnings.push(buildAccessWarning('profile_signal_filtered', `Wildcard subscription limited to profile '${state.profileName}' signals`, {
           profile_name: state.profileName,
@@ -1556,7 +1601,7 @@ function pickSignalsByState(state, inputSignals) {
     }
     const canonical = resolveSignalName(ch);
     if (!canonical) continue;
-    if (profile && !profileAllowsSignal(profile, canonical)) {
+    if (profile && !profileAllowsSignal(profile, canonical, 'read')) {
       warnings.push(buildAccessWarning('profile_signal_denied', `Signal '${canonical}' is outside profile '${state.profileName}' scope`, {
         profile_name: state.profileName,
         required_permission: 'read',

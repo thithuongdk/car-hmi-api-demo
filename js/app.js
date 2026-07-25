@@ -144,7 +144,7 @@ function _applyMode() {
   // Rebuild dashboard with mode filter
   _renderDashboard();
   // Re-subscribe WS: dev = all signals, user = active profile's signals only
-  _wsSubscribe(isDev ? '*' : (App.activeProfile?.signals || '*'));
+  _wsSubscribe(isDev ? '*' : (_profileSignalNames(App.activeProfile) || '*'));
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
@@ -180,7 +180,7 @@ function _connectWS() {
     App._wsBadge.className = "badge badge--ok";
     if (_onRealServer) Log.ws('CONNECTED', _wsBase().replace(/^wss?:\/\//, '') + '/ws/signals');
     // Subscribe to active profile signals (all in dev mode)
-    const sigs = App.mode === 'dev' ? '*' : (App.activeProfile?.signals || '*');
+    const sigs = App.mode === 'dev' ? '*' : (_profileSignalNames(App.activeProfile) || '*');
     _wsSubscribe(sigs);
   };
 
@@ -258,7 +258,7 @@ function _initDashboard() { _renderDashboard(); }
 function _getVisibleSignals() {
   if (App.mode === "dev") return App.signalsMeta;
   if (!App.activeProfile) return [];
-  const names = new Set(App.activeProfile.signals);
+  const names = new Set(_profileSignalNames(App.activeProfile));
   return App.signalsMeta.filter(s => names.has(s.name) || names.has(s.std_name));
 }
 
@@ -404,27 +404,45 @@ function _profileName(p) {
 }
 
 function _profileSignals(p) {
-  return Array.isArray(p?.signals) ? p.signals : [];
+  const list = Array.isArray(p?.signals) ? p.signals : [];
+  const merged = new Map();
+  list.forEach((item) => {
+    if (!item || typeof item !== 'object') return;
+    const name = String(item?.name || '').trim();
+    if (!name) return;
+    const raw = Array.isArray(item.permission) ? item.permission : [];
+    const perms = raw.includes('full') ? ['full'] : [raw.includes('read') ? 'read' : null, raw.includes('write') ? 'write' : null].filter(Boolean);
+    merged.set(name, { name, permission: perms.length ? perms : ['read'] });
+  });
+  return Array.from(merged.values());
+}
+
+function _profileSignalNames(p) {
+  return _profileSignals(p).map((item) => item.name);
 }
 
 function _profilePermission(p) {
-  const raw = Array.isArray(p?.permission) ? p.permission : [];
-  if (!raw.length) return ['read'];
-  return raw;
+  const union = new Set();
+  _profileSignals(p).forEach((item) => {
+    (item.permission || []).forEach((perm) => union.add(perm));
+  });
+  if (union.has('full')) return ['full'];
+  const out = [];
+  if (union.has('read')) out.push('read');
+  if (union.has('write')) out.push('write');
+  return out.length ? out : ['read'];
 }
 
 function _normalizeProfilesResponse(res) {
   const profiles = Array.isArray(res?.profiles) ? res.profiles.map(p => {
     const name = _profileName(p);
     const signals = _profileSignals(p);
-    const permission = _profilePermission(p);
     const selected = Boolean(p?.selected) || (res?.active && name === res.active);
     return {
       ...p,
       profile_name: name,
       name,
       signals,
-      permission,
       selected,
       description: p?.description || '',
     };
@@ -456,7 +474,7 @@ async function _loadProfiles() {
   normalized.profiles.forEach(p => {
     const opt = document.createElement("option");
     opt.value = p.name;
-    const perm = p.permission?.join('/') || 'read';
+    const perm = _profilePermission(p).join('/') || 'read';
     opt.textContent = `${p.name}${p.selected ? ' ✓' : ''} [${perm}]`;
     if (p.selected) { opt.selected = true; }
     sel.appendChild(opt);
@@ -466,7 +484,7 @@ async function _loadProfiles() {
     await API.selectProfile(sel.value, { devMode: App.mode === 'dev' });
     await _loadProfiles();
     _renderDashboard();
-    if (App.mode !== 'dev') _wsSubscribe(App.activeProfile?.signals || '*');
+    if (App.mode !== 'dev') _wsSubscribe(_profileSignalNames(App.activeProfile) || '*');
   };
 
   if (API.getProfileSessions) {
@@ -499,13 +517,14 @@ function _renderProfilesPanel(profileData, sessionsData) {
   profiles.forEach(p => {
     const card = document.createElement("div");
     card.className = "item-card" + (p.selected ? " selected" : "");
-    const chips = p.signals.slice(0, 6).map(s => {
+    const signalNames = _profileSignalNames(p);
+    const chips = signalNames.slice(0, 6).map(s => {
       const m = App.signalsMeta.find(x => x.name === s);
       return `<span class="chip ${m?.writable ? "writable" : ""}">${s}</span>`;
-    }).join("") + (p.signals.length > 6 ? `<span class="chip">+${p.signals.length - 6}</span>` : "");
+    }).join("") + (signalNames.length > 6 ? `<span class="chip">+${signalNames.length - 6}</span>` : "");
 
-    const writableCount = p.signals.filter(n => App.signalsMeta.find(s => s.name === n)?.writable).length;
-    const permissionLabel = (p.permission || ['read']).join(' / ');
+    const writableCount = signalNames.filter(n => App.signalsMeta.find(s => s.name === n)?.writable).length;
+    const permissionLabel = _profilePermission(p).join(' / ');
     card.innerHTML = `
       <div class="item-card-header">
         <span class="item-card-name">${p.name}</span>
@@ -517,7 +536,7 @@ function _renderProfilesPanel(profileData, sessionsData) {
       </div>
       <div class="item-card-body">
         <div style="margin-bottom:4px"><span class="badge badge--neutral">${permissionLabel}</span></div>
-        <div>${p.signals.length} signals &nbsp;<span style="color:var(--accent);font-size:11px">${writableCount} writable</span></div>
+        <div>${signalNames.length} signals &nbsp;<span style="color:var(--accent);font-size:11px">${writableCount} writable</span></div>
         <div class="signals-chips">${chips}</div>
       </div>`;
     grid.appendChild(card);
@@ -529,7 +548,7 @@ App._selectProfile = async (name) => {
   localStorage.setItem('car_hmi_profile_name', name);
   await _loadProfiles();
   _renderDashboard();
-  if (App.mode !== 'dev') _wsSubscribe(App.activeProfile?.signals || '*');
+  if (App.mode !== 'dev') _wsSubscribe(_profileSignalNames(App.activeProfile) || '*');
 };
 
 App._editProfile = async (name) => {
@@ -559,17 +578,18 @@ document.addEventListener("DOMContentLoaded", () => {
     const mode    = document.getElementById("pf-mode").value;
     const nameEl  = document.getElementById("pf-name");
     const name    = (nameEl.value || nameEl.dataset.editName || "").trim();
-    const signals = [...document.querySelectorAll("#pf-signals-checks input:checked")].map(i => i.value);
+    const selectedSignals = [...document.querySelectorAll("#pf-signals-checks input:checked")].map(i => i.value);
     let permission = [...document.querySelectorAll("#pf-permission input:checked")].map(i => i.value);
     if (!permission.length) permission = ['read'];
     if (permission.includes('full')) permission = ['full'];
+    const signals = selectedSignals.map((name) => ({ name, permission }));
     const description = (document.getElementById('pf-description').value || '').trim();
     if (!name) return alert("Profile name required");
     try {
       if (mode === "edit") {
-        await API.updateProfile({ name, signals, permission, description, section_id: String(App.sectionId).padStart(12, '0').slice(-12) });
+        await API.updateProfile({ name, signals, description, section_id: String(App.sectionId).padStart(12, '0').slice(-12) });
       } else {
-        await API.createProfile({ name, signals, permission, description });
+        await API.createProfile({ name, signals, description });
       }
       _closeProfileModal();
       await _loadProfiles();
@@ -653,7 +673,7 @@ function _openProfileModal(profile = null) {
     i.checked = selectedPerm.has(i.value) || (i.value === 'read' && selectedPerm.size === 0);
   });
 
-  const selected = new Set(isEdit ? _profileSignals(profile) : []);
+  const selected = new Set(isEdit ? _profileSignalNames(profile) : []);
   App.signalsMeta.forEach(s => {
     const label = document.createElement("label");
     label.className = "check-item";

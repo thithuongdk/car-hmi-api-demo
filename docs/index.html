@@ -118,8 +118,8 @@ window.onload = function () {
                   schema: { $ref: "#/components/schemas/ProfilesResponse" },
                   example: {
                     profiles: [
-                      { name: "U0", signals: ["ARS_FL_InjuryRiskAdaptive","OMS_FL_HandsOnWheel","ACR_FL_RetractRequest"], permission: ["full"], description: "Front seat profile", section_id: "9ab1c2d3e4f5" },
-                      { name: "U1", signals: ["ARS_FL_InjuryRiskAdaptive","SMA_VehicleStable"], permission: ["read"], description: "Rear seat profile", section_id: "9ab1c2d3e4f5" }
+                      { name: "U0", signals: [{ name: "ARS_FL_InjuryRiskAdaptive", permission: ["full"] }, { name: "OMS_FL_HandsOnWheel", permission: ["full"] }, { name: "ACR_FL_RetractRequest", permission: ["write"] }], description: "Front seat profile", section_id: "9ab1c2d3e4f5" },
+                      { name: "U1", signals: [{ name: "ARS_FL_InjuryRiskAdaptive", permission: ["read"] }, { name: "SMA_VehicleStable", permission: ["read"] }], description: "Rear seat profile", section_id: "9ab1c2d3e4f5" }
                     ],
                     total: 2,
                     active: "U0",
@@ -156,7 +156,7 @@ window.onload = function () {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ProfileCreate" },
-                example: { name: "U2", signals: ["ARS_FL_InjuryRiskAdaptive","ACR_FL_RetractRequest"], permission: ["read"], description: "Outside view" }
+                example: { name: "U2", signals: [{ name: "ARS_FL_InjuryRiskAdaptive", permission: ["read"] }, { name: "ACR_FL_RetractRequest", permission: ["read", "write"] }], description: "Outside view" }
               }
             }
           },
@@ -168,14 +168,14 @@ window.onload = function () {
         put: {
           tags: ["Profiles"],
           summary: "Update profile (optimistic lock)",
-          description: "Optional optimistic lock: if section_id is provided it must match the current server value.",
+          description: "Optional optimistic lock: if section_id is provided it must match the current server value. Request body uses signals: [{ name, permission }] and no longer accepts profile-level permission.",
           operationId: "updateProfile",
           requestBody: {
             required: true,
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ProfileUpdate" },
-                example: { section_id: "9ab1c2d3e4f5", name: "U0", signals: ["ARS_FL_InjuryRiskAdaptive","OMS_FL_HandsOnWheel","ACR_FL_RetractRequest"], permission: ["full"], description: "Front seat profile" }
+                example: { section_id: "9ab1c2d3e4f5", name: "U0", signals: [{ name: "ARS_FL_InjuryRiskAdaptive", permission: ["full"] }, { name: "OMS_FL_HandsOnWheel", permission: ["full"] }, { name: "ACR_FL_RetractRequest", permission: ["write"] }], description: "Front seat profile" }
               }
             }
           },
@@ -285,7 +285,11 @@ window.onload = function () {
                     storage: { retention_days: 30 },
                     safety: { write_access_enabled: true },
                     profiles: [
-                      { profile_name: "U0", selected: true, signals: ["HMI_CrashSeverity"] }
+                      {
+                        profile_name: "U0",
+                        selected: true,
+                        signals: [{ name: "HMI_CrashSeverity", permission: ["read"] }]
+                      }
                     ]
                   }
                 }
@@ -562,8 +566,7 @@ window.onload = function () {
           type: "object",
           properties: {
             name:         { type: "string",  example: "U0" },
-            signals:      { type: "array", items: { type: "string" }, example: ["ARS_FL_InjuryRiskAdaptive","OMS_FL_HandsOnWheel"] },
-            permission:   { type: "array", items: { type: "string" }, example: ["read"] },
+            signals:      { type: "array", items: { $ref: "#/components/schemas/ProfileSignal" } },
             description:  { type: "string", nullable: true, example: "Front seat profile" },
             section_id:   { type: "string", example: "9ab1c2d3e4f5" }
           }
@@ -572,10 +575,17 @@ window.onload = function () {
           type: "object",
           properties: {
             name:         { type: "string",  example: "U0" },
-            signals:      { type: "array", items: { type: "string" }, example: ["ARS_FL_InjuryRiskAdaptive","OMS_FL_HandsOnWheel"] },
-            permission:   { type: "array", items: { type: "string" }, example: ["full"] },
+            signals:      { type: "array", items: { $ref: "#/components/schemas/ProfileSignal" } },
             description:  { type: "string", nullable: true, example: "Front seat profile" },
             section_id:   { type: "string", example: "9ab1c2d3e4f5" }
+          }
+        },
+        ProfileSignal: {
+          type: "object",
+          required: ["name", "permission"],
+          properties: {
+            name: { type: "string", example: "ARS_FL_InjuryRiskAdaptive" },
+            permission: { type: "array", items: { type: "string" }, example: ["read", "write"] }
           }
         },
         ProfilesResponse: {
@@ -650,8 +660,7 @@ window.onload = function () {
           required: ["name"],
           properties: {
             name:         { type: "string" },
-            signals:      { type: "array", items: { type: "string" } },
-            permission:   { type: "array", items: { type: "string" }, example: ["read"] },
+            signals:      { type: "array", items: { $ref: "#/components/schemas/ProfileSignal" } },
             description:  { type: "string", nullable: true }
           }
         },
@@ -661,8 +670,7 @@ window.onload = function () {
           properties: {
             section_id:   { type: "string", description: "Must match the current profile section_id" },
             name:         { type: "string" },
-            signals:      { type: "array", items: { type: "string" } },
-            permission:   { type: "array", items: { type: "string" } },
+            signals:      { type: "array", items: { $ref: "#/components/schemas/ProfileSignal" } },
             description:  { type: "string", nullable: true }
           }
         },

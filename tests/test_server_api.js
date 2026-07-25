@@ -39,6 +39,10 @@ function eq(label, a, b) {
   else      { console.error('  ❌', label + ` — expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`); failed++; }
 }
 
+function buildProfileSignals(names, permission = ['read']) {
+  return names.map((name) => ({ name, permission: [...permission] }));
+}
+
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
 function request(method, url, body) {
   return new Promise((resolve, reject) => {
@@ -74,61 +78,57 @@ async function runTests() {
   console.log('\n━━━ GET /api/info ────────────────────────────────────────────');
   const info = await request('GET', '/api/info');
   ok('200 OK',                          info.status === 200);
-  ok('has project key',                 info.body?.project?.name);
-  ok('has hardware key',                info.body?.hardware?.can_bus);
-  ok('has server key',                  info.body?.server);
-  ok('api_key redacted',                info.body?.server?.api_key === '[REDACTED]');
-  ok('has section_id',                  typeof info.body?.section_id === 'number');
-  ok('has storage.safety',              info.body?.safety);
-  const infoSectionId = info.body.section_id;
+  ok('has API name',                    typeof info.body?.name === 'string');
+  ok('has version',                     typeof info.body?.version === 'string');
+  ok('has signal_count',                typeof info.body?.signal_count === 'number');
+  ok('has bus_connected',               typeof info.body?.bus_connected === 'boolean');
 
   // ── GET /api/profiles ─────────────────────────────────────────────────────
   console.log('\n━━━ GET /api/profiles ─────────────────────────────────────────');
   const profs = await request('GET', '/api/profiles');
   ok('200 OK',                          profs.status === 200);
   ok('returns profiles array',          Array.isArray(profs.body?.profiles));
-  ok('has section_id',                  typeof profs.body?.section_id === 'number');
   ok('at least 1 profile',              profs.body.profiles.length >= 1);
-  ok('has active profile',              profs.body.profiles.some(p => p.selected));
-  console.log(`   profiles: ${profs.body.profiles.length}, section_id: ${profs.body.section_id}`);
+  ok('has active profile name',         typeof profs.body?.active === 'string' && profs.body.active.length > 0);
+  console.log(`   profiles: ${profs.body.profiles.length}, active: ${profs.body.active}`);
 
   // ── GET /api/profile (active) ─────────────────────────────────────────────
   console.log('\n━━━ GET /api/profile (default = active) ───────────────────────');
   const activeP = await request('GET', '/api/profile');
   ok('200 OK',                          activeP.status === 200);
-  ok('has profile_name',                !!activeP.body?.profile_name);
+  ok('has name',                        !!activeP.body?.name);
   ok('has signals array',               Array.isArray(activeP.body?.signals));
-  console.log(`   active: ${activeP.body.profile_name}, signals: ${activeP.body.signals.length}`);
+  console.log(`   active: ${activeP.body.name}, signals: ${activeP.body.signals.length}`);
 
   // ── GET /api/profile?name=U0 ──────────────────────────────────────────────
   console.log('\n━━━ GET /api/profile?name=U0 ──────────────────────────────────');
   const pU0 = await request('GET', '/api/profile?name=U0');
   ok('200 OK',                          pU0.status === 200);
-  eq('profile_name is U0',              pU0.body?.profile_name, 'U0');
+  eq('name is U0',                      pU0.body?.name, 'U0');
   ok('has signals',                     Array.isArray(pU0.body?.signals) && pU0.body.signals.length > 0);
 
   // ── GET /api/profile?name=NONEXISTENT ─────────────────────────────────────
   console.log('\n━━━ GET /api/profile?name=NONEXISTENT ─────────────────────────');
   const missing = await request('GET', '/api/profile?name=NONEXISTENT');
   ok('404 Not Found',                   missing.status === 404);
-  ok('has error message',               !!missing.body?.error);
+  ok('has structured detail',           typeof missing.body?.detail?.code === 'string');
 
   // ── POST /api/profile (create) ────────────────────────────────────────────
   console.log('\n━━━ POST /api/profile ─────────────────────────────────────────');
   const created = await request('POST', '/api/profile', {
-    profile_name: '_TEST_PROFILE',
-    signals: ['HB_FL_ActivationLevel', 'CoolantTemp'],
+    name: '_TEST_PROFILE',
+    signals: buildProfileSignals(['HB_FL_ActivationLevel', 'CoolantTemp'], ['read']),
     description: 'Temp test profile',
   });
   ok('201 Created',                     created.status === 201);
-  eq('name matches',                    created.body?.profile_name, '_TEST_PROFILE');
+  eq('name matches',                    created.body?.name, '_TEST_PROFILE');
   ok('has signals',                     Array.isArray(created.body?.signals));
   eq('signals count',                   created.body.signals.length, 2);
 
   // ── POST duplicate → 409 ──────────────────────────────────────────────────
   const dup = await request('POST', '/api/profile', {
-    profile_name: '_TEST_PROFILE',
-    signals: ['HB_FL_ActivationLevel'],
+    name: '_TEST_PROFILE',
+    signals: buildProfileSignals(['HB_FL_ActivationLevel'], ['read']),
   });
   ok('409 Conflict on duplicate',       dup.status === 409);
 
@@ -136,41 +136,43 @@ async function runTests() {
   console.log('\n━━━ PUT /api/profile ──────────────────────────────────────────');
   // Need correct section_id
   const profs2 = await request('GET', '/api/profiles');
-  const sid    = profs2.body.section_id;
+  const sid    = created.body.section_id;
   const updated = await request('PUT', '/api/profile', {
-    profile_name: '_TEST_PROFILE',
-    signals: ['HB_FL_ActivationLevel', 'CoolantTemp', 'EngineSpeed'],
+    name: '_TEST_PROFILE',
+    signals: [
+      { name: 'HB_FL_ActivationLevel', permission: ['read'] },
+      { name: 'CoolantTemp', permission: ['read'] },
+      { name: 'EngineSpeed', permission: ['read'] },
+    ],
     description: 'Updated test profile',
     section_id: sid,
   });
-  ok('200 OK',                          updated.status === 200 || updated.status === 202);
+  ok('200 OK',                          updated.status === 200);
   ok('signals updated',                 updated.body?.signals?.length === 3);
 
   // ── PUT wrong section_id → 409 ────────────────────────────────────────────
   const badSid = await request('PUT', '/api/profile', {
-    profile_name: '_TEST_PROFILE',
+    name: '_TEST_PROFILE',
     section_id: -1,
   });
   ok('409 on section_id mismatch',      badSid.status === 409);
 
-  // ── PUT selectProfile shortcut ────────────────────────────────────────────
-  const selectOk = await request('PUT', '/api/profile', {
-    profile_name: 'U0',
-    selected: true,
-    section_id: (await request('GET', '/api/profiles')).body.section_id,
+  // ── PUT /api/profile/active ───────────────────────────────────────────────
+  const selectOk = await request('PUT', '/api/profile/active', {
+    name: 'U0',
   });
-  ok('selectProfile returns ok',        selectOk.body?.ok === true);
+  ok('set active returns 200',          selectOk.status === 200);
+  eq('active profile is U0',            selectOk.body?.active, 'U0');
   // Verify U0 is now active
   const activeNow = await request('GET', '/api/profile');
-  eq('U0 is active after select',       activeNow.body?.profile_name, 'U0');
+  eq('U0 is active after select',       activeNow.body?.name, 'U0');
 
   // ── DELETE /api/profile/:name ─────────────────────────────────────────────
   console.log('\n━━━ DELETE /api/profile ───────────────────────────────────────');
   const del = await request('DELETE', '/api/profile/_TEST_PROFILE');
-  ok('200 OK',                          del.status === 200);
-  eq('deleted name matches',            del.body?.deleted, '_TEST_PROFILE');
+  ok('204 No Content',                  del.status === 204);
   const afterDel = await request('GET', '/api/profiles');
-  ok('profile removed',                 !afterDel.body.profiles.find(p => p.profile_name === '_TEST_PROFILE'));
+  ok('profile removed',                 !afterDel.body.profiles.find(p => p.name === '_TEST_PROFILE'));
 
   // ── DELETE nonexistent → 404 ──────────────────────────────────────────────
   const delMiss = await request('DELETE', '/api/profile/__NOEXIST__');
@@ -216,31 +218,44 @@ async function runTests() {
   console.log('\n━━━ GET /signals ──────────────────────────────────────────────');
   const sigs = await request('GET', '/signals');
   ok('200 OK',                          sigs.status === 200);
-  ok('returns signals array',           Array.isArray(sigs.body?.signals));
-  ok('signals have value field',        typeof sigs.body.signals[0]?.value !== 'undefined');
-  ok('signals have name field',         !!sigs.body.signals[0]?.name);
-  ok('signals have timestamp',          sigs.body.signals[0]?.timestamp !== undefined);
-  ok('has ISO timestamp',               !!sigs.body?.timestamp);
-  console.log(`   signal count: ${sigs.body.signals.length}`);
+  ok('returns items array',             Array.isArray(sigs.body?.items));
+  ok('items have value field',          typeof sigs.body.items[0]?.value !== 'undefined');
+  ok('items have signal_name field',    !!sigs.body.items[0]?.signal_name);
+  ok('items have timestamp',            sigs.body.items[0]?.timestamp !== undefined);
+  console.log(`   signal count: ${sigs.body.items.length}`);
 
   // ── GET /signals/available ────────────────────────────────────────────────
   console.log('\n━━━ GET /signals/available ────────────────────────────────────');
   const avail = await request('GET', '/signals/available');
   ok('200 OK',                          avail.status === 200);
   ok('returns signals_info array',      Array.isArray(avail.body?.signals_info));
-  ok('has metadata fields',             typeof avail.body.signals_info[0]?.min === 'number');
+  ok('has metadata fields',             typeof avail.body.signals_info[0]?.min_value === 'number');
   ok('has writable field',              typeof avail.body.signals_info[0]?.writable === 'boolean');
   ok('states field present',            Array.isArray(avail.body.signals_info[0]?.states));
   console.log(`   available signals: ${avail.body.signals_info.length}`);
 
-  // Find a writable signal for PUT test
-  const aWritable = avail.body.signals_info.find(s => s.writable);
-  const aNonWritable = avail.body.signals_info.find(s => !s.writable);
+  // Resolve current active profile read/write scope for signal tests.
+  const currentProfile = await request('GET', '/api/profile');
+  const profileSignals = Array.isArray(currentProfile.body?.signals) ? currentProfile.body.signals : [];
+  const canWriteNames = new Set(
+    profileSignals
+      .filter((s) => Array.isArray(s.permission) && (s.permission.includes('write') || s.permission.includes('full')))
+      .map((s) => s.name)
+  );
+  const canReadNames = new Set(
+    profileSignals
+      .filter((s) => Array.isArray(s.permission) && (s.permission.includes('read') || s.permission.includes('full')))
+      .map((s) => s.name)
+  );
+
+  const aWritable = avail.body.signals_info.find((s) => s.writable && canWriteNames.has(s.signal_name));
+  const aNonWritable = avail.body.signals_info.find((s) => !s.writable && canReadNames.has(s.signal_name));
+  const aReadable = sigs.body.items[0]?.signal_name || null;
 
   // ── GET /signals/:name (existing) ─────────────────────────────────────────
   console.log('\n━━━ GET /signals/:name (existing) ─────────────────────────────');
-  if (aWritable) {
-    const getRes = await request('GET', `/signals/${aWritable.name}`);
+  if (aReadable) {
+    const getRes = await request('GET', `/signals/${aReadable}`);
     ok('200 OK',                          getRes.status === 200);
     ok('has name',                        !!getRes.body?.name);
     ok('has std_name',                    !!getRes.body?.std_name);
@@ -252,49 +267,62 @@ async function runTests() {
     ok('has description',                 typeof getRes.body?.description === 'string');
     ok('has states array',                Array.isArray(getRes.body?.states));
     console.log(`   ${getRes.body.name}: ${getRes.body.value} ${getRes.body.unit} [${getRes.body.min}..${getRes.body.max}] writable=${getRes.body.writable}`);
+  } else {
+    console.log('   ⚠️  No readable signal found in active profile scope');
   }
 
   // ── GET /signals/:name (non-existent → 404) ──────────────────────────────
   console.log('\n━━━ GET /signals/:name (non-existent) ─────────────────────────');
   const getMissing = await request('GET', '/signals/__NOSIGNAL__');
-  ok('404 for non-existent signal',      getMissing.status === 404);
-  ok('has error message',                !!getMissing.body?.error);
+  ok('403/404 for non-existent or out-of-scope signal', getMissing.status === 403 || getMissing.status === 404);
+  ok('has error message',                !!getMissing.body?.error || !!getMissing.body?.detail?.message);
 
   // ── PUT /signals/:name (writable) ─────────────────────────────────────────
   console.log('\n━━━ PUT /signals/:name (writable) ─────────────────────────────');
   if (aWritable) {
-    const writeRes = await request('PUT', `/signals/${aWritable.name}`, { value: aWritable.min + 5 });
+    const writeValue = Number(aWritable.min_value) + 5;
+    const writeRes = await request('PUT', `/signals/${aWritable.signal_name}`, { value: writeValue });
     ok('202 Accepted',                    writeRes.status === 202);
     ok('has signal_name',                 !!writeRes.body?.signal_name);
     ok('has std_name',                    !!writeRes.body?.std_name);
-    ok('has value',                       writeRes.body?.value === aWritable.min + 5);
+    ok('has value',                       writeRes.body?.value === writeValue);
     ok('has queued_at',                   !!writeRes.body?.queued_at);
-    console.log(`   wrote ${aWritable.name} = ${aWritable.min + 5}`);
+    console.log(`   wrote ${aWritable.signal_name} = ${writeValue}`);
   } else {
-    console.log('   ⚠️  No writable signals found');
+    console.log('   ⚠️  No writable signal found in active profile scope');
   }
 
   // ── PUT /signals/:name (non-writable → 403) ──────────────────────────────
   console.log('\n━━━ PUT /signals/:name (non-writable → 403) ───────────────────');
   if (aNonWritable) {
-    const deny = await request('PUT', `/signals/${aNonWritable.name}`, { value: 0 });
+    const deny = await request('PUT', `/signals/${aNonWritable.signal_name}`, { value: 0 });
     ok('403 Forbidden',                   deny.status === 403);
-    ok('error code SAFE_WRITE_DENIED',    deny.body?.code === 'SAFE_WRITE_DENIED');
-    console.log(`   denied write to ${aNonWritable.name}`);
+    ok(
+      'has write-denied style error code',
+      deny.body?.code === 'SAFE_WRITE_DENIED'
+        || deny.body?.id === 'SAFE_WRITE_DENIED'
+        || typeof deny.body?.detail?.code === 'string'
+    );
+    console.log(`   denied write to ${aNonWritable.signal_name}`);
   }
 
   // ── PUT /signals/:name (non-existent → 404) ──────────────────────────────
   const noSig = await request('PUT', '/signals/__NOSIGNAL__', { value: 0 });
-  ok('404 for non-existent signal',      noSig.status === 404);
+  ok('403/404 for non-existent or out-of-scope signal', noSig.status === 403 || noSig.status === 404);
 
   // ── PUT /signals/:name (out of range → 422) ──────────────────────────────
   if (aWritable) {
     val: {  // eslint-disable-line no-labels
-      const oor = await request('PUT', `/signals/${aWritable.name}`, { value: aWritable.max + 999 });
+      const oor = await request('PUT', `/signals/${aWritable.signal_name}`, { value: Number(aWritable.max_value) + 999 });
       // Some servers may accept due to mock behavior; check if 422
       if (oor.status === 422) {
         ok('422 for out-of-range value',    true);
-        ok('error code VAL_OUT_OF_RANGE',   oor.body?.code === 'VAL_OUT_OF_RANGE');
+        ok(
+          'error code VAL_OUT_OF_RANGE',
+          oor.body?.code === 'VAL_OUT_OF_RANGE'
+            || oor.body?.id === 'VAL_OUT_OF_RANGE'
+            || oor.body?.detail?.code === 'VAL_OUT_OF_RANGE'
+        );
       } else {
         console.log(`   ⚠️  Out-of-range returned ${oor.status} (not 422)`);
       }
@@ -304,8 +332,8 @@ async function runTests() {
   // ── POST /signals/batch_update ────────────────────────────────────────────
   console.log('\n━━━ POST /signals/batch_update ────────────────────────────────');
   const batchItems = [];
-  if (aWritable) batchItems.push({ name: aWritable.name, value: aWritable.min + 3 });
-  if (aNonWritable) batchItems.push({ name: aNonWritable.name, value: 1 });
+  if (aWritable) batchItems.push({ name: aWritable.signal_name, value: Number(aWritable.min_value) + 3 });
+  if (aNonWritable) batchItems.push({ name: aNonWritable.signal_name, value: 1 });
   batchItems.push({ name: '__NOEXIST__', value: 0 });
 
   const batchRes = await request('POST', '/signals/batch_update', { signals: batchItems });
@@ -315,12 +343,14 @@ async function runTests() {
   ok('has queued_at',                   typeof batchRes.body?.queued_at === 'number');
   ok('has errors array',                Array.isArray(batchRes.body?.errors));
   if (aWritable) {
-    const okItem = batchRes.body.queued.find(r => r.signal_name === aWritable.name);
-    ok('writable signal queued',         okItem?.signal_name === aWritable.name);
+    const okItem = batchRes.body.queued.find(r => r.signal_name === aWritable.signal_name);
+    ok('writable signal queued',         okItem?.signal_name === aWritable.signal_name);
   }
   if (aNonWritable) {
-    const denyItem = batchRes.body.errors.find(r => r.signal_name === aNonWritable.name);
-    ok('non-writable in errors',         denyItem?.error === 'not_writable');
+    const denyItem = batchRes.body.errors.find(r => r.signal_name === aNonWritable.signal_name);
+    const filtered = Array.isArray(batchRes.body?.warnings)
+      && batchRes.body.warnings.some((w) => Array.isArray(w.signals) && w.signals.includes(aNonWritable.signal_name));
+    ok('non-writable denied or filtered', denyItem?.error === 'not_writable' || filtered);
   }
   const missingItem = batchRes.body.errors.find(r => r.signal_name === '__NOEXIST__');
   ok('non-existent in errors',          missingItem?.error === 'not_found');

@@ -57,6 +57,36 @@ function _normalizeSignalList(signals) {
   return [...new Set(signals.map(_resolveSignalName).filter(Boolean))];
 }
 
+function _normalizePermissionList(raw) {
+  const inArr = Array.isArray(raw) ? raw.map(x => String(x || '').trim().toLowerCase()).filter(Boolean) : [];
+  if (inArr.includes('full')) return ['full'];
+  const out = [];
+  if (inArr.includes('read')) out.push('read');
+  if (inArr.includes('write')) out.push('write');
+  return out.length ? out : ['read'];
+}
+
+function _normalizeProfileSignals(rawSignals, fallbackPermission = ['read']) {
+  const list = Array.isArray(rawSignals) ? rawSignals : [];
+  const merged = new Map();
+  list.forEach((item) => {
+    if (!item || typeof item !== 'object') return;
+    const name = String(item.name || '').trim();
+    const permission = _normalizePermissionList(item.permission || fallbackPermission);
+    if (!name) return;
+    if (merged.has(name)) {
+      merged.set(name, _normalizePermissionList([...(merged.get(name) || []), ...permission]));
+    } else {
+      merged.set(name, _normalizePermissionList(permission));
+    }
+  });
+  return Array.from(merged.entries()).map(([name, permission]) => ({ name, permission }));
+}
+
+function _profileSignals(profile) {
+  return _normalizeProfileSignals(profile?.signals);
+}
+
 /**
  * Flatten can0.json messages → array of signal meta objects.
  * Matches the internal signal meta shape used by Store and MockAPI.
@@ -132,10 +162,10 @@ function _defaultProfiles() {
     ["HB_FL_ActivationLevel","HB_FR_ActivationLevel","WMS_FL_WebbingMovement","SPS_FL_SeatPositionX"].includes(n)
   ).slice(0, 4);
   return [
-    { profile_name: "Dev", signals: allNames,  selected: true  },
-    { profile_name: "U0",  signals: subset.length ? subset : allNames.slice(0, 4), selected: false },
-    { profile_name: "U1",  signals: allNames.slice(0, 2),  selected: false },
-    { profile_name: "U2",  signals: allNames.slice(0, 8),  selected: false },
+    { profile_name: "Dev", signals: allNames.map((name) => ({ name, permission: ['full'] })), selected: true },
+    { profile_name: "U0",  signals: (subset.length ? subset : allNames.slice(0, 4)).map((name) => ({ name, permission: ['read'] })), selected: false },
+    { profile_name: "U1",  signals: allNames.slice(0, 2).map((name) => ({ name, permission: ['read'] })), selected: false },
+    { profile_name: "U2",  signals: allNames.slice(0, 8).map((name) => ({ name, permission: ['read'] })), selected: false },
   ];
 }
 
@@ -285,8 +315,7 @@ const MockAPI = {
     const res = {
       profiles: d.profiles.map(p => ({
         name: p.profile_name,
-        signals: p.signals || [],
-        permission: Array.isArray(p.permission) && p.permission.length ? p.permission : ['read'],
+        signals: _profileSignals(p),
         description: p.description || '',
         section_id: String(d.section_id).padStart(12, '0').slice(-12),
       })),
@@ -307,8 +336,7 @@ const MockAPI = {
     if (!p) { Log.api("GET", `/api/profile?name=${name}`, null, { error: "Not found" }, 404); throw new Error("Profile not found"); }
     const out = {
       name: p.profile_name,
-      signals: p.signals || [],
-      permission: Array.isArray(p.permission) && p.permission.length ? p.permission : ['read'],
+      signals: _profileSignals(p),
       description: p.description || '',
       section_id: String(d.section_id).padStart(12, '0').slice(-12),
     };
@@ -329,12 +357,10 @@ const MockAPI = {
       Log.api("POST", "/api/profile", payload, { error: "Profile name already exists" }, 409);
       throw new Error("Profile '" + profileName + "' already exists");
     }
-    const permission = Array.isArray(payload?.permission) && payload.permission.length ? payload.permission : ['read'];
     const np = {
       profile_name: profileName,
       name: profileName,
-      signals: payload.signals || [],
-      permission: permission.includes('full') ? ['full'] : permission,
+      signals: _normalizeProfileSignals(payload.signals),
       description: payload?.description || '',
       selected: false,
     };
@@ -363,11 +389,10 @@ const MockAPI = {
     if (idx < 0) throw new Error("Profile not found");
     d.profiles[idx] = {
       ...d.profiles[idx],
-      signals: Array.isArray(payload.signals) ? payload.signals : d.profiles[idx].signals,
+      signals: Array.isArray(payload.signals)
+        ? _normalizeProfileSignals(payload.signals)
+        : d.profiles[idx].signals,
       description: payload.description !== undefined ? payload.description : d.profiles[idx].description,
-      permission: Array.isArray(payload.permission) && payload.permission.length
-        ? (payload.permission.includes('full') ? ['full'] : payload.permission)
-        : d.profiles[idx].permission,
     };
     d.section_id++;
     Store.save();

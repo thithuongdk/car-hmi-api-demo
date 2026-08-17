@@ -180,6 +180,24 @@ const _DEFAULT_CONFIGS = [
   { config_name: "low_load",  sampling_rate: 10,  RTSP_url: "", WebRTC_url: "", selected: false },
 ];
 
+const _DEV_SEATS = ['fl', 'fr', 'rl1', 'rl2', 'rr1'];
+const _DEV_SEAT_TOKEN = { fl: 'FL', fr: 'FR', rl1: 'RL1', rl2: 'RL2', rr1: 'RR1' };
+const _DEV_COM_CAN = {
+  fl: 'COM_Status_PumaFLCan',
+  fr: 'COM_Status_PumaFRCan',
+  rl1: 'COM_Status_PumaRL1Can',
+  rl2: 'COM_Status_PumaRL2Can',
+  rr1: 'COM_Status_PumaRR1Can',
+};
+const _DEV_ELK = {
+  fl: 'ELK_FL_ActuatorStatus',
+  fr: 'ELK_FR_ActuatorStatus',
+  rl1: 'ELK_RL1_ActuatorStatus',
+  rl2: 'ELK_RL2_ActuatorStatus',
+  rr1: 'ELK_RR1_ActuatorStatus',
+};
+const _devLocks = new Map();
+
 // ── Store (localStorage-backed) ───────────────────────────────────────────────
 const Store = (() => {
   const SK = "car-hmi-demo-v1";
@@ -708,6 +726,177 @@ const MockAPI = {
     const req = { signals };
     const res = { queued, count: queued.length, queued_at: Date.now() / 1000, errors };
     Log.api("POST", "/signals/batch_update", req, res, 202);
+    return res;
+  },
+
+  // ── Dev Mode ──────────────────────────────────────────────────────────────
+  async getDevmodeCatalog() {
+    await delay(20);
+    const res = {
+      seats: _DEV_SEATS,
+      families: [
+        { signal_name: 'ACR_RetractRequest', kind: 'state', states: [{ value: 5, description: 'Haptic' }, { value: 10, description: 'Retract level 10' }, { value: 15, description: 'Retract level 15' }, { value: 20, description: 'Retract level 20' }, { value: 25, description: 'Retract level 25' }] },
+        { signal_name: 'ABL_RetractRequest', kind: 'state', states: [{ value: 0, description: 'Off' }, { value: 1, description: 'Level 1' }, { value: 2, description: 'Level 2' }, { value: 3, description: 'Level 3' }, { value: 4, description: 'Level 4' }, { value: 5, description: 'Level 5' }, { value: 11, description: 'Special 11' }, { value: 12, description: 'Special 12' }] },
+        { signal_name: 'ISB_Color', kind: 'state', states: [{ value: 65280, description: 'Green' }, { value: 16711680, description: 'Red' }, { value: 255, description: 'Blue' }] },
+        { signal_name: 'HB_Request', kind: 'state', states: [{ value: 0, description: 'Off' }, { value: 1, description: 'Level 1' }, { value: 2, description: 'Level 2' }] },
+      ],
+      block_timeout_sec: 60,
+      status_stale_timeout_sec: 30,
+    };
+    Log.api('GET', '/api/devmode/catalog', null, res, 200);
+    return res;
+  },
+
+  async getDevmodeStatus() {
+    await delay(20);
+    const now = Date.now() / 1000;
+    const cid = _getClientId();
+    for (const [seat, lock] of _devLocks.entries()) {
+      if (!lock || lock.expires_at <= now) _devLocks.delete(seat);
+    }
+    const d = Store.get();
+    const seats = {};
+    for (const seat of _DEV_SEATS) {
+      const lock = _devLocks.get(seat);
+      const canSig = _resolveSignalName(_DEV_COM_CAN[seat]);
+      const canVal = canSig ? d.signal_values[canSig]?.value : 0;
+      seats[seat] = {
+        selected: !!lock,
+        owned: !!(lock && lock.owner_client_id === cid),
+        connected: Number(canVal) === 1,
+        expires_at: lock ? new Date(lock.expires_at * 1000).toISOString() : null,
+        remaining_sec: lock ? Math.max(0, Math.ceil(lock.expires_at - now)) : 0,
+      };
+    }
+    let hasFail = false;
+    for (const seat of _DEV_SEATS) {
+      const elkSig = _resolveSignalName(_DEV_ELK[seat]);
+      const elkVal = elkSig ? d.signal_values[elkSig]?.value : null;
+      if (elkVal === 1 || elkVal === 2) { hasFail = true; break; }
+    }
+    const res = { seats, system_status: hasFail ? 'failure_detected' : 'ok', status_stale_timeout_sec: 30, timestamp: new Date().toISOString() };
+    Log.api('GET', '/api/devmode/status', null, res, 200);
+    return res;
+  },
+
+  async selectDevmodeSeats(payload) {
+    await delay(20);
+    const now = Date.now() / 1000;
+    const timeoutSec = Math.max(1, Math.min(3600, Number(payload?.block_timeout_sec || 60)));
+    const cid = _getClientId();
+    const d = Store.get();
+    for (const [seat, lock] of _devLocks.entries()) {
+      if (!lock || lock.expires_at <= now) _devLocks.delete(seat);
+    }
+
+    const applied = {};
+    let okCount = 0;
+    for (const seat of _DEV_SEATS) {
+      if (!Object.prototype.hasOwnProperty.call(payload?.seats || {}, seat)) continue;
+      const selected = !!payload.seats[seat];
+      const lock = _devLocks.get(seat);
+      const canSig = _resolveSignalName(_DEV_COM_CAN[seat]);
+      const connected = canSig ? Number(d.signal_values[canSig]?.value) === 1 : false;
+      const ts = new Date().toISOString();
+      if (!selected) {
+        if (!lock || lock.owner_client_id === cid) {
+          _devLocks.delete(seat);
+          applied[seat] = { selected: false, applied_at: ts };
+          okCount += 1;
+        }
+        continue;
+      }
+      if (!connected) {
+        applied[seat] = { selected: false, error: 'seat_not_connected', reason: 'ECU is not connected or not responding', applied_at: ts };
+        continue;
+      }
+      if (lock && lock.owner_client_id !== cid) {
+        applied[seat] = { selected: false, error: 'devmode_seat_locked', reason: `Seat lock is owned by '${lock.owner_client_id}'`, applied_at: ts };
+        continue;
+      }
+      _devLocks.set(seat, { owner_client_id: cid, expires_at: now + timeoutSec });
+      applied[seat] = { selected: true, applied_at: ts };
+      okCount += 1;
+    }
+    const res = { applied, expires_at: new Date((now + timeoutSec) * 1000).toISOString() };
+    const st = okCount === 0 ? 409 : 200;
+    Log.api('POST', '/api/devmode/seats/select', payload, res, st);
+    if (okCount === 0) throw Object.assign(new Error('No seat accepted'), res);
+    return res;
+  },
+
+  async applyDevmodeSignal(payload) {
+    await delay(20);
+    const family = String(payload?.signal_name || '');
+    const value = Number(payload?.value);
+    const seats = payload?.seats || {};
+    const timeoutSec = Math.max(1, Math.min(3600, Number(payload?.block_timeout_sec || 60)));
+    const now = Date.now() / 1000;
+    const cid = _getClientId();
+    const d = Store.get();
+
+    const applied = {};
+    let okCount = 0;
+    const planned = [];
+
+    function mapSignals(seat) {
+      const token = _DEV_SEAT_TOKEN[seat];
+      if (family === 'ACR_RetractRequest') return [`ACR_${token}_RetractRequest`];
+      if (family === 'ABL_RetractRequest') return [`ABL_${token}_RetractRequest`];
+      if (family === 'HB_Request') return [`HB_Request_${token}`];
+      if (family === 'ISB_Color') return [`ISB_${token}_ColorRed`, `ISB_${token}_ColorGreen`, `ISB_${token}_ColorBlue`];
+      return [];
+    }
+
+    for (const seat of _DEV_SEATS) {
+      if (!seats[seat]) continue;
+      const ts = new Date().toISOString();
+      const lock = _devLocks.get(seat);
+      if (lock && lock.owner_client_id !== cid) {
+        applied[seat] = { signal_name: family, error: 'devmode_seat_locked', reason: `Seat lock is owned by '${lock.owner_client_id}'`, applied_at: ts };
+        continue;
+      }
+      const names = mapSignals(seat).map(_resolveSignalName);
+      if (!names.length || names.some((n) => !n)) {
+        applied[seat] = { signal_name: family, error: 'signal_not_available', reason: 'Mapped signal does not exist in CAN DB', applied_at: ts };
+        continue;
+      }
+      if (family === 'ISB_Color') {
+        const c = Math.max(0, Math.min(0xFFFFFF, Math.floor(value)));
+        planned.push({ name: names[0], value: (c >> 16) & 0xFF });
+        planned.push({ name: names[1], value: (c >> 8) & 0xFF });
+        planned.push({ name: names[2], value: c & 0xFF });
+      } else {
+        planned.push({ name: names[0], value });
+      }
+      _devLocks.set(seat, { owner_client_id: cid, expires_at: now + timeoutSec });
+      applied[seat] = { signal_name: family, value: family === 'ISB_Color' ? Math.floor(value) : value, applied_at: ts };
+      okCount += 1;
+    }
+
+    planned.forEach((it) => {
+      d.signal_values[it.name] = { value: it.value, timestamp: Date.now() / 1000 };
+    });
+    Store.save();
+    const res = { applied, expires_at: new Date((now + timeoutSec) * 1000).toISOString() };
+    const st = okCount === 0 ? 409 : 200;
+    Log.api('POST', '/api/devmode/signals', payload, res, st);
+    if (okCount === 0) throw Object.assign(new Error('No seat applied'), res);
+    return res;
+  },
+
+  async exitDevmode() {
+    await delay(20);
+    const cid = _getClientId();
+    const released = [];
+    for (const [seat, lock] of _devLocks.entries()) {
+      if (lock?.owner_client_id === cid) {
+        _devLocks.delete(seat);
+        released.push(seat);
+      }
+    }
+    const res = { released, count: released.length, exited_at: new Date().toISOString() };
+    Log.api('POST', '/api/devmode/exit', {}, res, 200);
     return res;
   },
 

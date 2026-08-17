@@ -70,6 +70,16 @@ GET    /signals/available         — full metadata (unit, min, max, writable, s
 PUT    /signals/{signal_name}     — write single writable signal → 202 + WS broadcast
 POST   /signals/batch_update      — batch write writable signals → 202 + WS broadcast
 
+# Dev Mode
+GET    /api/devmode/catalog       — seat list + signal families + timeout config
+GET    /api/devmode/status        — current seat lock status (`selected`, `owned`, `connected`, `expires_at`)
+POST   /api/devmode/seats/select  — select seats and acquire/renew seat locks (requires `X-Client-Id`)
+POST   /api/devmode/signals       — apply one signal family to multiple seats (requires `X-Client-Id`)
+POST   /api/devmode/exit          — release all current section seat locks (requires `X-Client-Id`)
+
+# ELK reset
+PUT    /signals/ELK_ResetErrorFlags — set `{ "value": 1 }` to request reset E-Locking failure memory
+
 # Realtime
 WS     /ws/signals                — real-time signal stream (500ms, per-client subscription)
 

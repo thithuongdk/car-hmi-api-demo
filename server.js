@@ -422,6 +422,243 @@ function err(res, code, id, msg, httpStatus) {
   res.status(httpStatus).json({ error: msg, code, id });
 }
 
+const DEV_SEATS = ['fl', 'fr', 'rl1', 'rl2', 'rr1'];
+const DEV_SEAT_TOKENS = { fl: 'FL', fr: 'FR', rl1: 'RL1', rl2: 'RL2', rr1: 'RR1' };
+const DEV_COM_CAN_BY_SEAT = {
+  fl: 'COM_Status_PumaFLCan',
+  fr: 'COM_Status_PumaFRCan',
+  rl1: 'COM_Status_PumaRL1Can',
+  rl2: 'COM_Status_PumaRL2Can',
+  rr1: 'COM_Status_PumaRR1Can',
+};
+const DEV_ELK_STATUS_BY_SEAT = {
+  fl: 'ELK_FL_ActuatorStatus',
+  fr: 'ELK_FR_ActuatorStatus',
+  rl1: 'ELK_RL1_ActuatorStatus',
+  rl2: 'ELK_RL2_ActuatorStatus',
+  rr1: 'ELK_RR1_ActuatorStatus',
+};
+const DEV_SUPPORTED_FAMILIES = new Set(['ACR_RetractRequest', 'ABL_RetractRequest', 'ISB_Color', 'HB_Request']);
+const DEV_DEFAULT_BLOCK_TIMEOUT_SEC = Math.max(1, Math.min(3600, Number(CONFIG_DATA?.devmode?.block_timeout_sec || 60)));
+const DEV_STATUS_STALE_TIMEOUT_SEC = Math.max(1, Math.min(3600, Number(CONFIG_DATA?.reader?.stale_threshold_sec || 30)));
+const devSeatLocks = new Map(); // seat -> { owner_client_id, expires_at, updated_at }
+
+// Keep demo defaults practical for Dev Mode flows.
+for (const seat of DEV_SEATS) {
+  const comName = resolveSignalName(DEV_COM_CAN_BY_SEAT[seat]);
+  if (comName && signalValues[comName]) signalValues[comName] = { value: 1, timestamp: Date.now() / 1000 };
+  const elkName = resolveSignalName(DEV_ELK_STATUS_BY_SEAT[seat]);
+  if (elkName && signalValues[elkName]) signalValues[elkName] = { value: 0, timestamp: Date.now() / 1000 };
+}
+
+// Simulate continuous heartbeat on COM/ELK status signals so stale logic remains meaningful.
+setInterval(() => {
+  const ts = nowSec();
+  for (const seat of DEV_SEATS) {
+    const comName = resolveSignalName(DEV_COM_CAN_BY_SEAT[seat]);
+    if (comName && signalValues[comName]) {
+      signalValues[comName] = { value: signalValues[comName].value, timestamp: ts };
+    }
+    const elkName = resolveSignalName(DEV_ELK_STATUS_BY_SEAT[seat]);
+    if (elkName && signalValues[elkName]) {
+      signalValues[elkName] = { value: signalValues[elkName].value, timestamp: ts };
+    }
+  }
+}, 1000);
+
+function nowSec() {
+  return Date.now() / 1000;
+}
+
+function toIsoFromSec(sec) {
+  return new Date(sec * 1000).toISOString();
+}
+
+function parseBlockTimeoutSec(raw) {
+  if (raw === undefined || raw === null || raw === '') return DEV_DEFAULT_BLOCK_TIMEOUT_SEC;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  const intVal = Math.floor(n);
+  if (intVal < 1 || intVal > 3600) return null;
+  return intVal;
+}
+
+function purgeExpiredDevSeatLocks(now = nowSec()) {
+  for (const [seat, lock] of devSeatLocks.entries()) {
+    if (!lock || lock.expires_at <= now) devSeatLocks.delete(seat);
+  }
+}
+
+function extractSeatFromSignalName(name) {
+  const text = String(name || '').toUpperCase();
+  const m = text.match(/(?:^|_)(FL|FR|RL1|RL2|RR1)(?:_|$)/);
+  return m ? m[1].toLowerCase() : null;
+}
+
+function resolveSeatConnectivitySignal(seat) {
+  const base = DEV_COM_CAN_BY_SEAT[seat];
+  return base ? resolveSignalName(base) : null;
+}
+
+function isSignalStale(sv, timeoutSec) {
+  if (!sv || !Number.isFinite(sv.timestamp)) return true;
+  return (nowSec() - sv.timestamp) > timeoutSec;
+}
+
+function isSeatConnected(seat) {
+  const signalName = resolveSeatConnectivitySignal(seat);
+  if (!signalName) return false;
+  const sv = signalValues[signalName];
+  if (!sv || isSignalStale(sv, DEV_STATUS_STALE_TIMEOUT_SEC)) return false;
+  return Number(sv.value) === 1;
+}
+
+function requireDevmodeClientId(req, res) {
+  const clientId = resolveClientId(req);
+  if (!clientId) {
+    apiErr(res, 400, 'client_id_required', `Header 'X-Client-Id' is required`);
+    return null;
+  }
+  return clientId;
+}
+
+function getSeatLockConflict(seat, clientId, now = nowSec()) {
+  purgeExpiredDevSeatLocks(now);
+  const lock = devSeatLocks.get(seat);
+  if (!lock) return null;
+  if (clientId && lock.owner_client_id === clientId) return null;
+  return {
+    seat,
+    owner_client_id: lock.owner_client_id,
+    expires_at: toIsoFromSec(lock.expires_at),
+    remaining_sec: Math.max(0, Math.ceil(lock.expires_at - now)),
+  };
+}
+
+function upsertSeatLock(seat, clientId, timeoutSec, now = nowSec()) {
+  const expiresAt = now + timeoutSec;
+  devSeatLocks.set(seat, { owner_client_id: clientId, updated_at: now, expires_at: expiresAt });
+  return expiresAt;
+}
+
+function releaseClientLocks(clientId) {
+  const released = [];
+  for (const [seat, lock] of devSeatLocks.entries()) {
+    if (lock?.owner_client_id === clientId) {
+      devSeatLocks.delete(seat);
+      released.push(seat);
+    }
+  }
+  return released;
+}
+
+function buildDevmodeStatus(clientId, now = nowSec()) {
+  purgeExpiredDevSeatLocks(now);
+  const seats = {};
+  for (const seat of DEV_SEATS) {
+    const lock = devSeatLocks.get(seat);
+    seats[seat] = {
+      selected: !!lock,
+      owned: !!(lock && lock.owner_client_id === clientId),
+      connected: isSeatConnected(seat),
+      expires_at: lock ? toIsoFromSec(lock.expires_at) : null,
+      remaining_sec: lock ? Math.max(0, Math.ceil(lock.expires_at - now)) : 0,
+    };
+  }
+  return seats;
+}
+
+function parseIsbColorToRgb(value) {
+  let n = null;
+  if (typeof value === 'number') n = value;
+  else if (typeof value === 'string') {
+    const text = value.trim();
+    if (/^#?[0-9a-fA-F]{6}$/.test(text)) {
+      n = parseInt(text.replace('#', ''), 16);
+    } else if (/^0x[0-9a-fA-F]+$/.test(text)) {
+      n = parseInt(text, 16);
+    } else {
+      n = Number(text);
+    }
+  }
+  if (!Number.isFinite(n)) return null;
+  const color = Math.floor(n);
+  if (color < 0 || color > 0xFFFFFF) return null;
+  return {
+    red: (color >> 16) & 0xFF,
+    green: (color >> 8) & 0xFF,
+    blue: color & 0xFF,
+    encoded: color,
+  };
+}
+
+function validateFamilyValue(family, value) {
+  if (family === 'HB_Request') {
+    const n = Number(value);
+    if (!Number.isFinite(n) || ![0, 1, 2].includes(Math.floor(n))) return null;
+    return { mode: 'single', value: Math.floor(n) };
+  }
+  if (family === 'ABL_RetractRequest') {
+    const n = Number(value);
+    const iv = Math.floor(n);
+    if (!Number.isFinite(n) || !((iv >= 0 && iv <= 5) || iv === 11 || iv === 12)) return null;
+    return { mode: 'single', value: iv };
+  }
+  if (family === 'ACR_RetractRequest') {
+    const n = Number(value);
+    const iv = Math.floor(n);
+    if (!Number.isFinite(n) || !(iv === 5 || (iv >= 10 && iv <= 25))) return null;
+    return { mode: 'single', value: iv };
+  }
+  if (family === 'ISB_Color') {
+    const rgb = parseIsbColorToRgb(value);
+    if (!rgb) return null;
+    return { mode: 'rgb', value: rgb };
+  }
+  return null;
+}
+
+function buildFamilySeatSignals(family, seat) {
+  const token = DEV_SEAT_TOKENS[seat];
+  if (!token) return [];
+  if (family === 'ACR_RetractRequest') return [`ACR_${token}_RetractRequest`];
+  if (family === 'ABL_RetractRequest') return [`ABL_${token}_RetractRequest`];
+  if (family === 'HB_Request') return [`HB_Request_${token}`];
+  if (family === 'ISB_Color') return [`ISB_${token}_ColorRed`, `ISB_${token}_ColorGreen`, `ISB_${token}_ColorBlue`];
+  return [];
+}
+
+function checkSeatLockForSignalWrite(req, canonicalSignalName) {
+  const seat = extractSeatFromSignalName(canonicalSignalName);
+  if (!seat) return null;
+  const conflict = getSeatLockConflict(seat, resolveClientId(req));
+  if (!conflict) return null;
+  return {
+    seat,
+    code: 'devmode_seat_locked',
+    message: `Seat '${seat}' is locked by another section`,
+    owner_client_id: conflict.owner_client_id,
+    expires_at: conflict.expires_at,
+    remaining_sec: conflict.remaining_sec,
+  };
+}
+
+function computeElkSystemStatus() {
+  let hasFailure = false;
+  for (const seat of DEV_SEATS) {
+    const sigName = resolveSignalName(DEV_ELK_STATUS_BY_SEAT[seat]);
+    if (!sigName) continue;
+    const sv = signalValues[sigName];
+    if (!sv || isSignalStale(sv, DEV_STATUS_STALE_TIMEOUT_SEC)) continue;
+    const v = Number(sv.value);
+    if (v === 1 || v === 2) {
+      hasFailure = true;
+      break;
+    }
+  }
+  return hasFailure ? 'failure_detected' : 'ok';
+}
+
 // ── Express app ───────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json());
@@ -647,6 +884,275 @@ app.post('/api/profile/offline', (req, res) => {
     last_seen: now - SESSION_TTL_SECONDS - 1,
   };
   res.json({ client_id: clientId, active, last_seen: profilesState.client_sessions[clientId].last_seen, ttl_seconds: SESSION_TTL_SECONDS });
+});
+
+// ── REST: Dev Mode seat lock + multi-seat signals ───────────────────────────
+app.get('/api/devmode/catalog', (req, res) => {
+  const families = [
+    {
+      signal_name: 'ACR_RetractRequest',
+      kind: 'state',
+      states: [
+        { value: 5, description: 'Haptic' },
+        { value: 10, description: 'Retract level 10' },
+        { value: 15, description: 'Retract level 15' },
+        { value: 20, description: 'Retract level 20' },
+        { value: 25, description: 'Retract level 25' },
+      ],
+    },
+    {
+      signal_name: 'ABL_RetractRequest',
+      kind: 'state',
+      states: [
+        { value: 0, description: 'Off' },
+        { value: 1, description: 'Level 1' },
+        { value: 2, description: 'Level 2' },
+        { value: 3, description: 'Level 3' },
+        { value: 4, description: 'Level 4' },
+        { value: 5, description: 'Level 5' },
+        { value: 11, description: 'Special 11' },
+        { value: 12, description: 'Special 12' },
+      ],
+    },
+    {
+      signal_name: 'ISB_Color',
+      kind: 'state',
+      states: [
+        { value: 65280, description: 'Green' },
+        { value: 16711680, description: 'Red' },
+        { value: 255, description: 'Blue' },
+      ],
+    },
+    {
+      signal_name: 'HB_Request',
+      kind: 'state',
+      states: [
+        { value: 0, description: 'Off' },
+        { value: 1, description: 'Level 1' },
+        { value: 2, description: 'Level 2' },
+      ],
+    },
+  ];
+  res.json({
+    seats: DEV_SEATS,
+    families,
+    block_timeout_sec: DEV_DEFAULT_BLOCK_TIMEOUT_SEC,
+    status_stale_timeout_sec: DEV_STATUS_STALE_TIMEOUT_SEC,
+  });
+});
+
+app.get('/api/devmode/status', (req, res) => {
+  const clientId = requireDevmodeClientId(req, res);
+  if (!clientId) return;
+  const now = nowSec();
+  const seats = buildDevmodeStatus(clientId, now);
+  res.json({
+    seats,
+    system_status: computeElkSystemStatus(),
+    status_stale_timeout_sec: DEV_STATUS_STALE_TIMEOUT_SEC,
+    timestamp: toIsoFromSec(now),
+  });
+});
+
+app.post('/api/devmode/seats/select', (req, res) => {
+  const clientId = requireDevmodeClientId(req, res);
+  if (!clientId) return;
+  const body = req.body || {};
+  const timeoutSec = parseBlockTimeoutSec(body.block_timeout_sec);
+  if (!timeoutSec) return apiErr(res, 400, 'invalid_block_timeout_sec', 'block_timeout_sec must be in range [1..3600]');
+  const seatMap = body.seats && typeof body.seats === 'object' ? body.seats : null;
+  if (!seatMap) return apiErr(res, 400, 'seats_required', 'seats object is required');
+
+  const now = nowSec();
+  purgeExpiredDevSeatLocks(now);
+  const applied = {};
+  let successCount = 0;
+
+  for (const seat of DEV_SEATS) {
+    if (!Object.prototype.hasOwnProperty.call(seatMap, seat)) continue;
+    const selected = !!seatMap[seat];
+    const appliedAt = toIsoFromSec(nowSec());
+    if (!selected) {
+      const conflict = getSeatLockConflict(seat, clientId, nowSec());
+      if (conflict) {
+        applied[seat] = {
+          selected: false,
+          error: 'devmode_seat_locked',
+          reason: `Seat lock is owned by '${conflict.owner_client_id}'`,
+          applied_at: appliedAt,
+        };
+      } else {
+        devSeatLocks.delete(seat);
+        applied[seat] = { selected: false, applied_at: appliedAt };
+        successCount += 1;
+      }
+      continue;
+    }
+
+    if (!isSeatConnected(seat)) {
+      applied[seat] = {
+        selected: false,
+        error: 'seat_not_connected',
+        reason: 'ECU is not connected or not responding',
+        applied_at: appliedAt,
+      };
+      continue;
+    }
+
+    const conflict = getSeatLockConflict(seat, clientId, nowSec());
+    if (conflict) {
+      applied[seat] = {
+        selected: false,
+        error: 'devmode_seat_locked',
+        reason: `Seat lock is owned by '${conflict.owner_client_id}'`,
+        applied_at: appliedAt,
+      };
+      continue;
+    }
+
+    upsertSeatLock(seat, clientId, timeoutSec, nowSec());
+    applied[seat] = { selected: true, applied_at: appliedAt };
+    successCount += 1;
+  }
+
+  const response = {
+    applied,
+    expires_at: toIsoFromSec(now + timeoutSec),
+  };
+
+  if (successCount === 0) return res.status(409).json(response);
+  return res.json(response);
+});
+
+app.post('/api/devmode/exit', (req, res) => {
+  const clientId = requireDevmodeClientId(req, res);
+  if (!clientId) return;
+  purgeExpiredDevSeatLocks();
+  const released = releaseClientLocks(clientId);
+  res.json({ released, count: released.length, exited_at: new Date().toISOString() });
+});
+
+app.post('/api/devmode/signals', (req, res) => {
+  const clientId = requireDevmodeClientId(req, res);
+  if (!clientId) return;
+  const body = req.body || {};
+  const family = String(body.signal_name || '').trim();
+  if (!DEV_SUPPORTED_FAMILIES.has(family)) {
+    return apiErr(res, 400, 'unsupported_signal_family', `signal_name must be one of: ${[...DEV_SUPPORTED_FAMILIES].join(', ')}`);
+  }
+  const timeoutSec = parseBlockTimeoutSec(body.block_timeout_sec);
+  if (!timeoutSec) return apiErr(res, 400, 'invalid_block_timeout_sec', 'block_timeout_sec must be in range [1..3600]');
+  const normalized = validateFamilyValue(family, body.value);
+  if (!normalized) return apiErr(res, 422, 'invalid_signal_value', `value is invalid for '${family}'`);
+
+  const seatMap = body.seats && typeof body.seats === 'object' ? body.seats : null;
+  if (!seatMap) return apiErr(res, 400, 'seats_required', 'seats object is required');
+
+  const applied = {};
+  const writeUpdates = [];
+  let successCount = 0;
+  const requestStart = nowSec();
+
+  for (const seat of DEV_SEATS) {
+    if (!seatMap[seat]) continue;
+    const appliedAt = toIsoFromSec(nowSec());
+
+    if (!isSeatConnected(seat)) {
+      applied[seat] = {
+        signal_name: family,
+        error: 'seat_not_connected',
+        reason: 'ECU is not connected or not responding',
+        applied_at: appliedAt,
+      };
+      continue;
+    }
+
+    const lockConflict = getSeatLockConflict(seat, clientId, nowSec());
+    if (lockConflict) {
+      applied[seat] = {
+        signal_name: family,
+        error: 'devmode_seat_locked',
+        reason: `Seat lock is owned by '${lockConflict.owner_client_id}'`,
+        applied_at: appliedAt,
+      };
+      continue;
+    }
+
+    const targetSignals = buildFamilySeatSignals(family, seat);
+    if (!targetSignals.length) {
+      applied[seat] = {
+        signal_name: family,
+        error: 'signal_not_available',
+        reason: 'No mapping signal found for this seat',
+        applied_at: appliedAt,
+      };
+      continue;
+    }
+
+    const metas = targetSignals.map((ref) => resolveSignalMeta(ref));
+    if (metas.some((m) => !m)) {
+      applied[seat] = {
+        signal_name: family,
+        error: 'signal_not_available',
+        reason: 'Mapped signal does not exist in CAN DB',
+        applied_at: appliedAt,
+      };
+      continue;
+    }
+    if (metas.some((m) => !m.writable)) {
+      applied[seat] = {
+        signal_name: family,
+        error: 'signal_not_available',
+        reason: 'Mapped signal is not writable',
+        applied_at: appliedAt,
+      };
+      continue;
+    }
+
+    let plannedWrites = [];
+    if (family === 'ISB_Color') {
+      plannedWrites = [
+        { meta: metas[0], value: normalized.value.red },
+        { meta: metas[1], value: normalized.value.green },
+        { meta: metas[2], value: normalized.value.blue },
+      ];
+    } else {
+      plannedWrites = [{ meta: metas[0], value: normalized.value }];
+    }
+
+    const outOfRange = plannedWrites.find((w) => w.value < w.meta.min || w.value > w.meta.max);
+    if (outOfRange) {
+      applied[seat] = {
+        signal_name: family,
+        error: 'value_out_of_range',
+        reason: `Value ${outOfRange.value} out of range for ${outOfRange.meta.name}`,
+        applied_at: appliedAt,
+      };
+      continue;
+    }
+
+    for (const w of plannedWrites) {
+      signalValues[w.meta.name] = { value: w.value, timestamp: nowSec() };
+      writeUpdates.push({ name: w.meta.name, value: w.value });
+    }
+    upsertSeatLock(seat, clientId, timeoutSec, nowSec());
+    applied[seat] = {
+      signal_name: family,
+      value: family === 'ISB_Color' ? normalized.value.encoded : normalized.value,
+      applied_at: appliedAt,
+    };
+    successCount += 1;
+  }
+
+  if (writeUpdates.length) broadcastWrite(writeUpdates);
+
+  const response = {
+    applied,
+    expires_at: toIsoFromSec(requestStart + timeoutSec),
+  };
+
+  if (successCount === 0) return res.status(409).json(response);
+  return res.json(response);
 });
 
 // ── REST: Configs ─────────────────────────────────────────────────────────────
@@ -1093,6 +1599,10 @@ app.put('/signals/:name', (req, res) => {
   const gate = requireProfilePermission(req, res, 'write', { signalName: meta?.name || name });
   if (!gate.ok) return;
   if (!meta)          return err(res, 3004, 'VAL_NOT_FOUND',    `Signal '${name}' not found`, 404);
+  const lockConflict = checkSeatLockForSignalWrite(req, meta.name);
+  if (lockConflict) {
+    return res.status(423).json({ detail: lockConflict });
+  }
   if (!meta.writable) return err(res, 4002, 'SAFE_WRITE_DENIED', `Signal '${name}' is not writable`, 403);
   const value = req.body?.value;
   if (value === undefined || value === null)
@@ -1121,6 +1631,17 @@ app.post('/signals/batch_update', (req, res) => {
     const meta = resolveSignalMeta(ref);
     if (!meta) {
       errors.push({ signal_name: ref, value, error: 'not_found' });
+      continue;
+    }
+    const lockConflict = checkSeatLockForSignalWrite(req, meta.name);
+    if (lockConflict) {
+      warnings.push(buildAccessWarning('devmode_seat_locked', lockConflict.message, {
+        signal_name: meta.name,
+        seat: lockConflict.seat,
+        owner_client_id: lockConflict.owner_client_id,
+        expires_at: lockConflict.expires_at,
+        remaining_sec: lockConflict.remaining_sec,
+      }));
       continue;
     }
     if (gate.profile && !profileAllowsSignal(gate.profile, meta.name, 'write')) {

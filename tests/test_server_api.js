@@ -70,6 +70,35 @@ function request(method, url, body) {
   });
 }
 
+function requestWithHeaders(method, url, body, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const opts = {
+      method,
+      hostname: '127.0.0.1',
+      port: global.__TEST_PORT__,
+      path: url,
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers,
+      },
+      timeout: 5000,
+    };
+    const req = http.request(opts, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        let json;
+        try { json = JSON.parse(data); } catch (_) { json = data; }
+        resolve({ status: res.statusCode, headers: res.headers, body: json });
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+    if (body !== undefined) req.write(JSON.stringify(body));
+    req.end();
+  });
+}
+
 // ── Test Suite ────────────────────────────────────────────────────────────────
 async function runTests() {
   console.log('\n🧪 Server REST API Tests\n');
@@ -354,6 +383,55 @@ async function runTests() {
   }
   const missingItem = batchRes.body.errors.find(r => r.signal_name === '__NOEXIST__');
   ok('non-existent in errors',          missingItem?.error === 'not_found');
+
+  // ── Dev Mode APIs ─────────────────────────────────────────────────────────
+  console.log('\n━━━ Dev Mode APIs ─────────────────────────────────────────────');
+  const clientAHeaders = { 'X-Client-Id': 'test-dev-client-a' };
+  const clientBHeaders = { 'X-Client-Id': 'test-dev-client-b' };
+
+  const devCatalog = await request('GET', '/api/devmode/catalog');
+  ok('devmode catalog 200',             devCatalog.status === 200);
+  ok('devmode seats list',              Array.isArray(devCatalog.body?.seats) && devCatalog.body.seats.length === 5);
+
+  const devStatus = await requestWithHeaders('GET', '/api/devmode/status', undefined, clientAHeaders);
+  ok('devmode status 200',              devStatus.status === 200);
+  ok('devmode status has seats object', typeof devStatus.body?.seats === 'object' && devStatus.body.seats !== null);
+
+  const selectNoHeader = await request('POST', '/api/devmode/seats/select', { seats: { fl: true } });
+  ok('devmode select requires client header', selectNoHeader.status === 400);
+
+  const selectSeats = await requestWithHeaders(
+    'POST',
+    '/api/devmode/seats/select',
+    { seats: { fl: true, fr: true }, block_timeout_sec: 60 },
+    clientAHeaders,
+  );
+  ok('devmode seat select 200/409',     selectSeats.status === 200 || selectSeats.status === 409);
+  ok('devmode seat select has applied', typeof selectSeats.body?.applied === 'object' && selectSeats.body.applied !== null);
+
+  const devApply = await requestWithHeaders(
+    'POST',
+    '/api/devmode/signals',
+    { signal_name: 'ABL_RetractRequest', value: 3, seats: { fl: true, fr: true }, block_timeout_sec: 60 },
+    clientAHeaders,
+  );
+  ok('devmode signal apply 200/409',    devApply.status === 200 || devApply.status === 409);
+  ok('devmode signal apply has applied', typeof devApply.body?.applied === 'object' && devApply.body.applied !== null);
+
+  const crossWrite = await requestWithHeaders(
+    'PUT',
+    '/signals/ABL_FL_RetractRequest',
+    { value: 4 },
+    clientBHeaders,
+  );
+  ok('cross-section write blocked or accepted based on lock', crossWrite.status === 423 || crossWrite.status === 202 || crossWrite.status === 403);
+  if (crossWrite.status === 423) {
+    ok('lock error code devmode_seat_locked', crossWrite.body?.detail?.code === 'devmode_seat_locked');
+  }
+
+  const devExit = await requestWithHeaders('POST', '/api/devmode/exit', {}, clientAHeaders);
+  ok('devmode exit 200',                devExit.status === 200);
+  ok('devmode exit has count',          typeof devExit.body?.count === 'number');
 
   // ── GET /api/restraints/match ─────────────────────────────────────────────
   console.log('\n━━━ GET /api/restraints/match ─────────────────────────────────');

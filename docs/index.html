@@ -74,6 +74,7 @@ window.onload = function () {
       { name: "Profiles", description: "User profile management - which signals to show per user" },
       { name: "Config",   description: "System configuration: sampling rate, RTSP/WebRTC URLs. Dev mode only." },
       { name: "Signals",     description: "Read CAN signal values and write writable signals" },
+      { name: "Dev Mode",    description: "Seat lock lifecycle and multi-seat signal apply for developer workflow" },
       { name: "Restraints",  description: "Restraint system video matching based on live occupant data (weight, seat position) and crash pulse" }
     ],
     paths: {
@@ -402,7 +403,7 @@ window.onload = function () {
         post: {
           tags: ["Signals"],
           summary: "Write multiple writable signals simultaneously (batch)",
-          description: "Bulk write — sync multiple writable signals in a single request. Each item can specify `name`, `signal_name`, **or** `std_name` to identify the signal.",
+          description: "Bulk write — sync multiple writable signals in a single request. Each item can specify `name`, `signal_name`, **or** `std_name` to identify the signal. If a target seat is locked by another Dev Mode section, signal is skipped and warning `devmode_seat_locked` is returned.",
           operationId: "batchUpdateSignals",
           requestBody: {
             required: true,
@@ -448,7 +449,7 @@ window.onload = function () {
         put: {
           tags: ["Signals"],
           summary: "Write a value to a writable signal",
-          description: "Forwarded to CAN writer. Only applies to signals with `writable: true`. The path param `signal_name` chấp nhận cả `name` gốc hoặc `std_name`.",
+          description: "Forwarded to CAN writer. Only applies to signals with `writable: true`. The path param `signal_name` chấp nhận cả `name` gốc hoặc `std_name`. If mapped seat is locked by another Dev Mode section, returns HTTP 423 with `detail.code=devmode_seat_locked`.",
           operationId: "updateSignal",
           parameters: [
             { name: "signal_name", in: "path", required: true,
@@ -464,7 +465,134 @@ window.onload = function () {
           responses: {
             "202": { description: "Accepted - signal queued for CAN write", content: { "application/json": { schema: { $ref: "#/components/schemas/SignalWriteAccepted" }, example: { signal_name: "ACR_FL_RetractRequest", std_name: "ACR_FL_RetractRequest", value: 2, queued_at: 1717243200.123 } } } },
             "403": { description: "Forbidden - signal is read-only (TX: false)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "423": { description: "Locked by Dev Mode seat lock", content: { "application/json": { example: { detail: { code: "devmode_seat_locked", seat: "fl", message: "Seat 'fl' is locked by another section", owner_client_id: "dev-client-x", remaining_sec: 38 } } } } },
             "404": { description: "Signal not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
+          }
+        }
+      },
+      "/api/devmode/catalog": {
+        get: {
+          tags: ["Dev Mode"],
+          summary: "Get Dev Mode seat and family catalog",
+          operationId: "getDevmodeCatalog",
+          responses: {
+            "200": {
+              description: "OK",
+              content: {
+                "application/json": {
+                  example: {
+                    seats: ["fl", "fr", "rl1", "rl2", "rr1"],
+                    families: [
+                      { signal_name: "ACR_RetractRequest", kind: "state", states: [{ value: 5, description: "Haptic" }, { value: 10, description: "Retract level 10" }] },
+                      { signal_name: "ABL_RetractRequest", kind: "state", states: [{ value: 0, description: "Off" }, { value: 5, description: "Level 5" }] },
+                      { signal_name: "ISB_Color", kind: "state", states: [{ value: 65280, description: "Green" }] },
+                      { signal_name: "HB_Request", kind: "state", states: [{ value: 0, description: "Off" }, { value: 2, description: "Level 2" }] }
+                    ],
+                    block_timeout_sec: 60,
+                    status_stale_timeout_sec: 30
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/devmode/status": {
+        get: {
+          tags: ["Dev Mode"],
+          summary: "Get seat lock/connectivity status",
+          description: "Requires `X-Client-Id` header.",
+          operationId: "getDevmodeStatus",
+          parameters: [
+            { name: "X-Client-Id", in: "header", required: true, schema: { type: "string" }, description: "Section/client owner id" }
+          ],
+          responses: {
+            "200": {
+              description: "OK",
+              content: {
+                "application/json": {
+                  example: {
+                    seats: {
+                      fl: { selected: true, owned: true, connected: true, expires_at: "2026-08-13T15:22:37.312Z", remaining_sec: 47 },
+                      fr: { selected: false, owned: false, connected: true, expires_at: null, remaining_sec: 0 }
+                    },
+                    system_status: "ok",
+                    status_stale_timeout_sec: 30,
+                    timestamp: "2026-08-13T15:21:37.312Z"
+                  }
+                }
+              }
+            },
+            "400": { description: "Missing X-Client-Id", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
+          }
+        }
+      },
+      "/api/devmode/seats/select": {
+        post: {
+          tags: ["Dev Mode"],
+          summary: "Select seats and acquire/renew locks",
+          description: "Requires `X-Client-Id`. If all selected seats fail, server returns 409.",
+          operationId: "selectDevmodeSeats",
+          parameters: [
+            { name: "X-Client-Id", in: "header", required: true, schema: { type: "string" }, description: "Section/client owner id" }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                example: {
+                  seats: { fl: true, fr: true, rl1: true, rl2: false, rr1: false },
+                  block_timeout_sec: 60
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Applied (full/partial success)", content: { "application/json": { example: { applied: { fl: { selected: true, applied_at: "2026-08-13T15:21:37.312Z" }, rl1: { selected: false, error: "seat_not_connected", reason: "ECU is not connected or not responding", applied_at: "2026-08-13T15:21:37.512Z" } }, expires_at: "2026-08-13T15:22:37.312Z" } } } },
+            "409": { description: "All selected seats rejected", content: { "application/json": { example: { applied: { fl: { selected: false, error: "seat_not_connected", reason: "ECU is not connected or not responding", applied_at: "2026-08-13T15:21:37.512Z" } }, expires_at: "2026-08-13T15:22:37.312Z" } } } },
+            "400": { description: "Invalid payload or missing client id", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }
+          }
+        }
+      },
+      "/api/devmode/signals": {
+        post: {
+          tags: ["Dev Mode"],
+          summary: "Apply one signal family to selected seats",
+          description: "Requires `X-Client-Id`. Supported families: `ACR_RetractRequest`, `ABL_RetractRequest`, `ISB_Color`, `HB_Request`.",
+          operationId: "applyDevmodeSignal",
+          parameters: [
+            { name: "X-Client-Id", in: "header", required: true, schema: { type: "string" }, description: "Section/client owner id" }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                example: {
+                  signal_name: "HB_Request",
+                  value: 2,
+                  seats: { fl: true, fr: true, rl1: true, rl2: false, rr1: false },
+                  block_timeout_sec: 60
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Applied (full/partial success)", content: { "application/json": { example: { applied: { fl: { signal_name: "HB_Request", value: 2, applied_at: "2026-08-13T15:21:37.312Z" }, rl1: { signal_name: "HB_Request", error: "seat_not_connected", reason: "ECU is not connected or not responding", applied_at: "2026-08-13T15:21:37.512Z" } }, expires_at: "2026-08-13T15:22:37.312Z" } } } },
+            "409": { description: "All seats rejected", content: { "application/json": { example: { applied: {}, expires_at: "2026-08-13T15:22:37.312Z" } } } }
+          }
+        }
+      },
+      "/api/devmode/exit": {
+        post: {
+          tags: ["Dev Mode"],
+          summary: "Release all locks of current section",
+          description: "Requires `X-Client-Id`.",
+          operationId: "exitDevmode",
+          parameters: [
+            { name: "X-Client-Id", in: "header", required: true, schema: { type: "string" }, description: "Section/client owner id" }
+          ],
+          responses: {
+            "200": { description: "Released", content: { "application/json": { example: { released: ["fl", "fr"], count: 2, exited_at: "2026-08-13T15:23:37.312Z" } } } }
           }
         }
       },

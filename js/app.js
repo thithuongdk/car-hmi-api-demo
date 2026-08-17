@@ -16,6 +16,14 @@ const App = {
   sectionId: 1,           // tracks latest section_id from server
   profileSessions: null,
   heartbeatTimer: null,
+  devmode: {
+    catalog: null,
+    status: null,
+    selectedSeats: { fl: false, fr: false, rl1: false, rl2: false, rr1: false },
+    familyValues: {},
+    renewTimer: null,
+    statusTimer: null,
+  },
 };
 
 // Auto-detect real server vs local/static mock.
@@ -93,11 +101,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-reset").addEventListener("click", () => {
     if (confirm("Reset all demo data to defaults?")) { Store.reset(); location.reload(); }
   });
+  const elkBtn = document.getElementById('btn-elk-reset');
+  if (elkBtn) {
+    elkBtn.addEventListener('click', async () => {
+      await _resetElkFailureMemory();
+    });
+  }
 
   // Load initial data
   await _loadSignalsMeta();
   await _loadProfiles();
   await _loadConfigs();
+  await _initDevmode();
   _initDashboard();
   _connectWS();
   _startProfileHeartbeat();
@@ -145,6 +160,297 @@ function _applyMode() {
   _renderDashboard();
   // Re-subscribe WS: dev = all signals, user = active profile's signals only
   _wsSubscribe(isDev ? '*' : (_profileSignalNames(App.activeProfile) || '*'));
+  if (!isDev) {
+    _stopDevmodeRenew();
+    if (typeof API.exitDevmode === 'function') API.exitDevmode().catch(() => {});
+  }
+  _renderDevmodePanels();
+}
+
+async function _initDevmode() {
+  if (typeof API.getDevmodeCatalog !== 'function') return;
+  try {
+    App.devmode.catalog = await API.getDevmodeCatalog();
+  } catch (_) {
+    App.devmode.catalog = null;
+  }
+  await _refreshDevmodeStatus();
+  _renderDevmodePanels();
+  if (App.devmode.statusTimer) clearInterval(App.devmode.statusTimer);
+  App.devmode.statusTimer = setInterval(() => {
+    _refreshDevmodeStatus(true);
+  }, 2000);
+}
+
+async function _refreshDevmodeStatus(reRender = true) {
+  if (typeof API.getDevmodeStatus !== 'function') return;
+  try {
+    const status = await API.getDevmodeStatus();
+    App.devmode.status = status;
+    if (status?.seats) {
+      for (const seat of Object.keys(App.devmode.selectedSeats)) {
+        if (status.seats[seat]?.owned) App.devmode.selectedSeats[seat] = true;
+      }
+    }
+  } catch (_) {
+    App.devmode.status = null;
+  }
+  if (reRender) _renderDevmodePanels();
+}
+
+function _renderDevmodePanels() {
+  const panelA = document.getElementById('devmode-a');
+  const panelB = document.getElementById('devmode-b');
+  if (!panelA || !panelB) return;
+
+  const cat = App.devmode.catalog;
+  const seats = cat?.seats || ['fl', 'fr', 'rl1', 'rl2', 'rr1'];
+  const selectedCount = seats.filter((s) => App.devmode.selectedSeats[s]).length;
+
+  if (!cat) {
+    panelA.innerHTML = `<p style="color:var(--muted)">Dev Mode API is unavailable in current mode.</p>`;
+    panelB.innerHTML = `<p style="color:var(--muted)">No ELK/CAN status data.</p>`;
+    return;
+  }
+
+  const seatSwitches = seats.map((seat) => {
+    const seatStatus = App.devmode.status?.seats?.[seat];
+    const connected = seatStatus?.connected !== false;
+    const owned = !!seatStatus?.owned;
+    const disabled = !connected;
+    const checked = !!App.devmode.selectedSeats[seat];
+    const hint = disabled ? 'disabled' : owned ? 'owned' : (seatStatus?.selected ? 'locked' : 'free');
+    return `<label class="dm-seat ${disabled ? 'disabled' : ''}">
+      <input type="checkbox" data-seat="${seat}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} />
+      <span>${seat.toUpperCase()}</span>
+      <small>${hint}</small>
+    </label>`;
+  }).join('');
+
+  const familyRows = (cat.families || []).map((f) => {
+    const defaultValue = App.devmode.familyValues[f.signal_name] ?? (f.states?.[0]?.value ?? 0);
+    const options = (f.states || []).map((st) => `<option value="${st.value}" ${Number(defaultValue) === Number(st.value) ? 'selected' : ''}>${st.description} (${st.value})</option>`).join('');
+    return `<div class="dm-family-row">
+      <div class="dm-family-name">${f.signal_name}</div>
+      <select id="dm-value-${f.signal_name}" class="sel dm-family-select">${options}</select>
+      <button class="btn btn-sm btn-primary" data-family="${f.signal_name}">Apply</button>
+    </div>`;
+  }).join('');
+
+  panelA.innerHTML = `
+    <div class="dm-topbar">
+      <div>Selected seats: <strong>${selectedCount}</strong></div>
+      <div>Timeout: <strong>${cat.block_timeout_sec}</strong>s</div>
+      <div>Stale timeout: <strong>${cat.status_stale_timeout_sec}</strong>s</div>
+      <button class="btn btn-sm" id="btn-devmode-exit">Exit Dev Mode</button>
+    </div>
+    <div class="dm-seats">${seatSwitches}</div>
+    <div class="dm-families">${familyRows}</div>
+    <div id="dm-feedback" class="dm-feedback"></div>
+  `;
+
+  panelA.querySelectorAll('.dm-seat input').forEach((el) => {
+    el.addEventListener('change', async () => {
+      const seat = el.dataset.seat;
+      App.devmode.selectedSeats[seat] = el.checked;
+      await _syncDevmodeSeats();
+    });
+  });
+
+  panelA.querySelectorAll('.dm-family-row button').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const family = btn.dataset.family;
+      const sel = document.getElementById(`dm-value-${family}`);
+      const value = sel ? Number(sel.value) : 0;
+      App.devmode.familyValues[family] = value;
+      await _applyDevmodeFamily(family, value);
+    });
+  });
+
+  panelA.querySelectorAll('.dm-family-select').forEach((sel) => {
+    sel.addEventListener('change', () => {
+      const family = sel.id.replace('dm-value-', '');
+      App.devmode.familyValues[family] = Number(sel.value);
+    });
+  });
+
+  const exitBtn = document.getElementById('btn-devmode-exit');
+  if (exitBtn) {
+    exitBtn.addEventListener('click', async () => {
+      try {
+        await API.exitDevmode();
+        for (const seat of Object.keys(App.devmode.selectedSeats)) App.devmode.selectedSeats[seat] = false;
+        _stopDevmodeRenew();
+        await _refreshDevmodeStatus();
+      } catch (e) {
+        _setDevmodeFeedback(`Exit failed: ${e.message}`, true);
+      }
+    });
+  }
+
+  _renderDevmodeStatusB();
+}
+
+function _setDevmodeFeedback(text, isErr = false) {
+  const el = document.getElementById('dm-feedback');
+  if (!el) return;
+  el.textContent = text;
+  el.className = `dm-feedback ${isErr ? 'err' : 'ok'}`;
+}
+
+function _selectedDevmodeSeatsMap() {
+  const map = {};
+  for (const [seat, selected] of Object.entries(App.devmode.selectedSeats)) map[seat] = !!selected;
+  return map;
+}
+
+async function _syncDevmodeSeats() {
+  if (typeof API.selectDevmodeSeats !== 'function') return;
+  try {
+    const blockTimeout = App.devmode.catalog?.block_timeout_sec || 60;
+    const res = await API.selectDevmodeSeats({
+      seats: _selectedDevmodeSeatsMap(),
+      block_timeout_sec: blockTimeout,
+    });
+    const applied = res?.applied ? Object.entries(res.applied).length : 0;
+    _setDevmodeFeedback(`Seat selection synced (${applied} seats).`);
+    const selectedCount = Object.values(App.devmode.selectedSeats).filter(Boolean).length;
+    if (selectedCount > 0) _startDevmodeRenew();
+    else _stopDevmodeRenew();
+    await _refreshDevmodeStatus();
+  } catch (e) {
+    _setDevmodeFeedback(`Seat selection failed: ${e.message}`, true);
+    await _refreshDevmodeStatus();
+  }
+}
+
+function _startDevmodeRenew() {
+  if (App.devmode.renewTimer) clearInterval(App.devmode.renewTimer);
+  const timeoutSec = App.devmode.catalog?.block_timeout_sec || 60;
+  const intervalMs = Math.max(5000, Math.floor((timeoutSec * 1000) / 2));
+  App.devmode.renewTimer = setInterval(async () => {
+    try {
+      await API.selectDevmodeSeats({
+        seats: _selectedDevmodeSeatsMap(),
+        block_timeout_sec: timeoutSec,
+      });
+      await _refreshDevmodeStatus(true);
+    } catch (_) {
+      // Keep trying; lock is not auto-released by frontend on renew failure.
+    }
+  }, intervalMs);
+}
+
+function _stopDevmodeRenew() {
+  if (App.devmode.renewTimer) clearInterval(App.devmode.renewTimer);
+  App.devmode.renewTimer = null;
+}
+
+async function _applyDevmodeFamily(family, value) {
+  if (typeof API.applyDevmodeSignal !== 'function') return;
+  try {
+    const blockTimeout = App.devmode.catalog?.block_timeout_sec || 60;
+    const res = await API.applyDevmodeSignal({
+      signal_name: family,
+      value,
+      seats: _selectedDevmodeSeatsMap(),
+      block_timeout_sec: blockTimeout,
+    });
+    const appliedSeats = Object.entries(res?.applied || {})
+      .filter(([, it]) => it && !it.error)
+      .map(([seat]) => seat);
+    _setDevmodeFeedback(`Applied ${family}=${value} on: ${appliedSeats.join(', ') || 'none'}`);
+    await _refreshDevmodeStatus();
+  } catch (e) {
+    _setDevmodeFeedback(`Apply signal failed: ${e.message}`, true);
+  }
+}
+
+function _resolveSigValue(name) {
+  const n = App.currentValues[name]?.value;
+  return Number.isFinite(n) ? n : null;
+}
+
+function _elkLabel(v) {
+  if (v === null || v === undefined) return 'Status Unknown';
+  if (v === 0) return 'ok';
+  if (v === 1) return 'failure at previous';
+  if (v === 2) return 'failure now';
+  if (v === 3) return 'unknown';
+  return `value=${v}`;
+}
+
+function _connLabel(v) {
+  if (v === null || v === undefined) return 'Status Unknown';
+  return Number(v) === 1 ? 'connected' : 'disconnected';
+}
+
+function _statusClassFromBool(ok) {
+  return ok ? 'ok' : 'err';
+}
+
+function _renderDevmodeStatusB() {
+  const panelB = document.getElementById('devmode-b');
+  if (!panelB) return;
+  const seats = ['FL', 'FR', 'RL1', 'RL2', 'RR1'];
+  const pumaRows = seats.map((token) => {
+    const canName = `COM_Status_Puma${token}Can`;
+    const elkName = `ELK_${token}_ActuatorStatus`;
+    const canVal = _resolveSigValue(canName);
+    const elkVal = _resolveSigValue(elkName);
+    const canOk = Number(canVal) === 1;
+    const elkFail = Number(elkVal) === 1 || Number(elkVal) === 2;
+    return `<tr>
+      <td>${token}</td>
+      <td class="${_statusClassFromBool(canOk)}">${_connLabel(canVal)}</td>
+      <td>${_elkLabel(elkVal)}</td>
+      <td class="${elkFail ? 'err' : 'ok'}">${elkFail ? 'failure' : 'ok'}</td>
+    </tr>`;
+  }).join('');
+
+  const others = [
+    { name: 'PANTHER CAN', signal: 'COM_Status_PantherCan' },
+    { name: 'PANTHER Ethernet', signal: 'COM_Status_PantherEthernet' },
+    { name: 'NVIDIA Jetson CAN', signal: 'COM_Status_NvidiaJetsonCan' },
+    { name: 'NVIDIA Jetson Ethernet', signal: 'COM_Status_NvidiaJetsonEthernet' },
+  ];
+
+  const otherRows = others.map((item) => {
+    const v = _resolveSigValue(item.signal);
+    const known = v !== null;
+    const ok = Number(v) === 1;
+    return `<tr>
+      <td>${item.name}</td>
+      <td>${item.signal}</td>
+      <td class="${known ? _statusClassFromBool(ok) : ''}">${known ? _connLabel(v) : 'not available in current DBC'}</td>
+    </tr>`;
+  }).join('');
+
+  const systemStatus = App.devmode.status?.system_status || 'unknown';
+  panelB.innerHTML = `
+    <div class="dm-system-line">System ELK status: <strong>${systemStatus}</strong></div>
+    <table class="data-table dm-status-table">
+      <thead><tr><th>PUMA Seat</th><th>CAN</th><th>ELK Actuator</th><th>Seat State</th></tr></thead>
+      <tbody>${pumaRows}</tbody>
+    </table>
+    <table class="data-table dm-status-table" style="margin-top:12px">
+      <thead><tr><th>Component</th><th>Signal</th><th>Status</th></tr></thead>
+      <tbody>${otherRows}</tbody>
+    </table>
+  `;
+}
+
+async function _resetElkFailureMemory() {
+  try {
+    if (typeof API.resetElkFailureMemory === 'function') {
+      await API.resetElkFailureMemory();
+    } else {
+      await API.updateSignal('ELK_ResetErrorFlags', 1);
+    }
+    alert('Reset E-Locking Failure Memory request sent.');
+  } catch (e) {
+    alert(`Reset E-Locking Failure Memory failed: ${e.message}`);
+  }
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────

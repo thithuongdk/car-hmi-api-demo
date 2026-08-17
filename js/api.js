@@ -130,6 +130,14 @@ const RealAPI = (() => {
     getSignalsAvailable()        { return _req('GET',  '/signals/available'); },
     updateSignal(name, value)    { return _req('PUT',  `/signals/${encodeURIComponent(name)}`, { value }); },
     batchUpdateSignals(signals)  { return _req('POST', '/signals/batch_update', { signals }); },
+    resetElkFailureMemory()      { return _req('PUT', '/signals/ELK_ResetErrorFlags', { value: 1 }); },
+
+    // ── Dev Mode ──────────────────────────────────────────────────────────────
+    getDevmodeCatalog()          { return _req('GET', '/api/devmode/catalog'); },
+    getDevmodeStatus()           { return _req('GET', '/api/devmode/status'); },
+    selectDevmodeSeats(payload)  { return _req('POST', '/api/devmode/seats/select', payload); },
+    applyDevmodeSignal(payload)  { return _req('POST', '/api/devmode/signals', payload); },
+    exitDevmode()                { return _req('POST', '/api/devmode/exit', {}); },
 
     // ── Info ──────────────────────────────────────────────────────────────────
     getInfo()  { return _req('GET', '/api/info'); },

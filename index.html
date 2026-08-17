@@ -113,18 +113,42 @@
 
   <!-- DEV MODE (dev only) -->
   <div class="tab-pane" id="tab-devmode">
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Dev Mode View A &nbsp;<span class="badge badge--dev">Seat Lock + Multi-seat Signal</span></h2>
+    <section class="devmode-view" id="view-devmode" style="display: none;">
+      <div class="devmode-topbar">
+        <div class="devmode-subtabs">
+          <button id="devmode-subtab-a" class="nav-btn active">A - Seat Actuation</button>
+          <button id="devmode-subtab-b" class="nav-btn">B - Network &amp; ELK Status</button>
+        </div>
+        <span id="devmode-lock-badge" class="badge badge--disconnected">No seat locked</span>
+        <button id="devmode-exit-btn" class="btn">Exit Dev Mode (release locks)</button>
       </div>
-      <div id="devmode-a"></div>
-    </div>
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Dev Mode View B &nbsp;<span class="badge badge--neutral">ELK/CAN Connectivity</span></h2>
-      </div>
-      <div id="devmode-b"></div>
-    </div>
+
+      <section class="card devmode-panel" id="devmode-view-a">
+        <h3>Seat selection</h3>
+        <p class="devmode-hint">
+          Turn on a seat switch to take control of it. The backend locks that seat for
+          <span id="devmode-timeout-label">60</span>s, blocking other sections from writing to it
+          until the lock expires or you press "Exit Dev Mode".
+        </p>
+        <div class="seat-switch-row" id="devmode-seat-switches"></div>
+
+        <h3 style="margin-top:18px;">Signal actuation</h3>
+        <div class="devmode-tabs" id="devmode-family-tabs"></div>
+        <div class="devmode-states" id="devmode-family-states"></div>
+        <div class="devmode-log" id="devmode-apply-log"></div>
+      </section>
+
+      <section class="card devmode-panel" id="devmode-view-b" style="display:none;">
+        <div class="devmode-panel-head">
+          <h3>Component status</h3>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span id="devmode-elk-summary" class="badge badge--warning">Status Unknown</span>
+            <button id="devmode-elk-reset-btn" class="btn">Reset E-Locking Failure Memory</button>
+          </div>
+        </div>
+        <div class="component-grid" id="devmode-component-grid"></div>
+      </section>
+    </section>
   </div>
 
   <!-- RESTRAINTS (dev only) -->
@@ -268,5 +292,6 @@
 <script src="js/mock.js"></script>
 <script src="js/api.js"></script>
 <script src="js/app.js"></script>
+<script src="js/devmode.js"></script>
 </body>
 </html>

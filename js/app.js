@@ -112,7 +112,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   await _loadSignalsMeta();
   await _loadProfiles();
   await _loadConfigs();
-  await _initDevmode();
+  if (!document.getElementById('view-devmode')) {
+    await _initDevmode();
+  }
   _initDashboard();
   _connectWS();
   _startProfileHeartbeat();
@@ -514,6 +516,13 @@ function _connectWS() {
       const sigName = sig.name || sig.signal_name;
       if (!sigName) continue;
       App.currentValues[sigName] = { value: sig.value, timestamp: payload.timestamp };
+      if (typeof window.onSignalStreamValue === 'function') {
+        try {
+          window.onSignalStreamValue(sigName, sig.value, payload.timestamp);
+        } catch (_) {
+          // Keep dashboard updates alive even if external hook fails.
+        }
+      }
     }
     _updateSignalCards((payload.signals || []).map(s => ({ ...s, name: s.name || s.signal_name })));
   };

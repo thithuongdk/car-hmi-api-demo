@@ -219,7 +219,10 @@ function normalizeProfileSignals(rawSignals, fallbackPermission = ['read']) {
   const merged = new Map();
   const list = Array.isArray(rawSignals) ? rawSignals : [];
 
-  for (const item of list) {
+  for (const rawItem of list) {
+    const item = typeof rawItem === 'string'
+      ? { name: rawItem, permission: rawItem.trim() === '*' ? ['full'] : fallbackPermission }
+      : rawItem;
     if (!item || typeof item !== 'object') continue;
     const name = String(item.name || '').trim();
     const permission = toPermissionList(item.permission || fallbackPermission);
@@ -257,6 +260,15 @@ function profileSignalNames(profile, required = null) {
     .map((entry) => entry.name);
 }
 
+function profileHasWildcard(profile, required = null) {
+  return profileSignalEntries(profile).some((entry) => {
+    if (entry.name !== '*') return false;
+    if (!required) return true;
+    const perms = new Set(toPermissionList(entry.permission));
+    return perms.has('full') || perms.has(required);
+  });
+}
+
 function bootstrapProfilesState() {
   if (PROFILES_JSON?.profiles && typeof PROFILES_JSON.profiles === 'object' && !Array.isArray(PROFILES_JSON.profiles)) {
     const loaded = PROFILES_JSON.profiles;
@@ -276,11 +288,7 @@ function bootstrapProfilesState() {
     const name = p.profile_name || p.name;
     if (!name) continue;
     profilesState.profiles[name] = {
-      signals: normalizeProfileSignals(
-        Array.isArray(p.signals)
-          ? p.signals.map((signalName) => ({ name: String(signalName || '').trim(), permission: ['full'] }))
-          : []
-      ),
+      signals: normalizeProfileSignals(p.signals, ['full']),
       exinfo: normalizeProfileExinfo(p?.exinfo),
       description: p.description || null,
       created_at: Date.now() / 1000,
@@ -347,7 +355,7 @@ function profileAllowsSignal(profile, signalName, required = 'read') {
   if (!profile) return false;
   const stdName = SIGNALS_BY_NAME.get(signalName)?.std_name || null;
   return profileSignalEntries(profile).some((entry) => {
-    const inScope = entry.name === signalName || (stdName && entry.name === stdName);
+    const inScope = entry.name === '*' || entry.name === signalName || (stdName && entry.name === stdName);
     if (!inScope) return false;
     const perms = new Set(toPermissionList(entry.permission));
     return perms.has('full') || perms.has(required);
@@ -385,11 +393,7 @@ function requireProfilePermission(req, res, required, opts = {}) {
     return { ok: false };
   }
 
-  if (opts.signalName && !profileSignalEntries(profile).some((entry) => {
-    if (entry.name !== opts.signalName && entry.name !== SIGNALS_BY_NAME.get(opts.signalName)?.std_name) return false;
-    const perms = new Set(toPermissionList(entry.permission));
-    return perms.has('full') || perms.has(required);
-  })) {
+  if (opts.signalName && !profileAllowsSignal(profile, opts.signalName, required)) {
     apiErr(res, 403, 'profile_signal_denied', `Signal '${opts.signalName}' is outside profile '${profileName}' scope`, {
       profile_name: profileName,
       required_permission: required,
@@ -2114,6 +2118,8 @@ function pickSignalsByState(state, inputSignals) {
     const low = String(ch).toLowerCase();
     if (ch === '*') {
       if (!profile) {
+        out.push('*');
+      } else if (profileHasWildcard(profile, 'read')) {
         out.push('*');
       } else {
         const allowed = profileSignalNames(profile, 'read').map(s => resolveSignalName(s)).filter(Boolean);

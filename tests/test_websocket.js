@@ -157,6 +157,23 @@ async function runTests() {
     pickNames.push('Generic_SeatFunctionEnable', 'HMI_CrashSeverity', 'HMI_FL_OccupantAge_years');
   }
 
+  // ── 2b. Admin profile wildcard scope ─────────────────────────────────────
+  console.log('\n━━━ 2b. Admin Profile Wildcard Scope ─────────────────────────');
+  const wsAdmin = await wsConnect(port, `${wsPath}?profile_name=admin`);
+  const adminMsgs = [];
+  wsAdmin.on('message', (data) => {
+    try { adminMsgs.push(JSON.parse(data.toString())); } catch (_) {}
+  });
+  await wsSend(wsAdmin, { type: 'subscribe', signals: ['*'] });
+  await new Promise(r => setTimeout(r, 700));
+  const adminAck = adminMsgs.find(m => m.type === 'subscribed');
+  const adminProtocolAck = adminMsgs.find(m => m.type === 'subscribe_ack');
+  const adminSnapshot = adminMsgs.find(m => !m.type && Array.isArray(m.signals));
+  ok('admin wildcard remains unrestricted', adminAck?.signals === '*');
+  ok('admin wildcard has no scope warnings', Array.isArray(adminProtocolAck?.warnings) && adminProtocolAck.warnings.length === 0);
+  ok('admin receives full RX snapshot', adminSnapshot?.signals?.length === snapshot2[0]?.signals?.length);
+  wsAdmin.close();
+
   // ── 3. Subscribe to specific signals ──────────────────────────────────────
   console.log('\n━━━ 3. Subscribe to Specific Signals ──────────────────────────');
   const ws3 = await wsConnect(port, wsPath);

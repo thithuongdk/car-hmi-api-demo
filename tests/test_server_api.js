@@ -136,6 +136,35 @@ async function runTests() {
   eq('name is U0',                      pU0.body?.name, 'U0');
   ok('has signals',                     Array.isArray(pU0.body?.signals) && pU0.body.signals.length > 0);
 
+  // ── Admin wildcard profile ────────────────────────────────────────────────
+  console.log('\n━━━ Admin Wildcard Profile ────────────────────────────────────');
+  const adminHeaders = { 'X-Profile-Name': 'admin' };
+  const adminProfile = await requestWithHeaders('GET', '/api/profile?name=admin', undefined, adminHeaders);
+  ok('admin profile exists',             adminProfile.status === 200);
+  eq('admin has one wildcard entry',     adminProfile.body?.signals?.length, 1);
+  eq('admin wildcard name is *',         adminProfile.body?.signals?.[0]?.name, '*');
+  ok('admin wildcard permission is full', adminProfile.body?.signals?.[0]?.permission?.includes('full'));
+
+  const adminSignals = await requestWithHeaders('GET', '/signals', undefined, adminHeaders);
+  ok('admin can read signals',            adminSignals.status === 200);
+  eq('admin can read complete catalog',   adminSignals.body?.total, info.body.signal_count);
+  eq('admin signal filter has no warnings', adminSignals.body?.warnings?.length, 0);
+
+  const adminAvailable = await requestWithHeaders('GET', '/signals/available', undefined, adminHeaders);
+  const adminWritable = adminAvailable.body?.signals_info?.find(s => s.writable);
+  ok('admin sees complete metadata',      adminAvailable.body?.signals_info?.every(s => s.value !== null));
+  if (adminWritable) {
+    const adminWrite = await requestWithHeaders(
+      'PUT',
+      `/signals/${encodeURIComponent(adminWritable.signal_name)}`,
+      { value: adminWritable.min_value },
+      adminHeaders
+    );
+    ok('admin full permission can write', adminWrite.status === 202);
+  } else {
+    ok('admin full permission can write', false);
+  }
+
   // ── GET /api/profile?name=NONEXISTENT ─────────────────────────────────────
   console.log('\n━━━ GET /api/profile?name=NONEXISTENT ─────────────────────────');
   const missing = await request('GET', '/api/profile?name=NONEXISTENT');

@@ -67,6 +67,9 @@ function ok(label, val) {
   ok('no top-level section_id',     typeof profs.section_id === 'undefined');
   ok('profile section_id present',  typeof profs.profiles[0]?.section_id === 'string');
   profs.profiles.forEach(p => console.log('   -', p.name, '| sigs:', p.signals.length));
+  const admin = profs.profiles.find(p => p.name === 'admin');
+  ok('admin wildcard profile exists', admin?.signals?.length === 1);
+  ok('admin wildcard has full permission', admin?.signals?.[0]?.name === '*' && admin.signals[0].permission?.includes('full'));
 
   console.log('\n=== GET /api/profile?name=U0 ===');
   const p0 = await MockAPI.getProfile('U0');
@@ -207,6 +210,35 @@ function ok(label, val) {
       }, 800);
     };
     ws.onmessage = (e) => { try { received.push(JSON.parse(e.data)); } catch(_) {} };
+  });
+
+  console.log('\n=== MockWebSocket wildcard subscription ===');
+  await new Promise(resolve => {
+    const ws = new MockWebSocket('ws://localhost:8000/ws/signals');
+    const received = [];
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', signals: ['*'] }));
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      received.push(msg);
+      const ack = received.find(m => m.type === 'subscribed');
+      const snapshot = received.find(m => !m.type && Array.isArray(m.signals));
+      if (ack && snapshot) {
+        ok('wildcard ack represents all signals', ack.signals === '*');
+        ok('wildcard snapshot contains all RX signals', snapshot.signals.length === d.signals_meta.filter(s => !s.writable).length);
+        setTimeout(() => {
+          ws.close();
+          resolve();
+        }, 0);
+      }
+    };
+    setTimeout(() => {
+      if (ws.readyState !== 3) {
+        ok('wildcard ack represents all signals', false);
+        ok('wildcard snapshot contains all RX signals', false);
+        ws.close();
+        resolve();
+      }
+    }, 2000);
   });
 
   // ── Summary ────────────────────────────────────────────────────────────────

@@ -464,7 +464,7 @@ async function _resetElkFailureMemory() {
  */
 function _wsSubscribe(signals, type = 'subscribe') {
   if (!App.ws || App.ws.readyState !== 1) return;
-  const payloadSignals = signals === '*' ? ['*'] : signals;
+  const payloadSignals = signals === '*' || (Array.isArray(signals) && signals.includes('*')) ? '*' : signals;
   App.ws.send(JSON.stringify({ type, signals: payloadSignals }));
 }
 
@@ -574,6 +574,7 @@ function _getVisibleSignals() {
   if (App.mode === "dev") return App.signalsMeta;
   if (!App.activeProfile) return [];
   const names = new Set(_profileSignalNames(App.activeProfile));
+  if (names.has('*')) return App.signalsMeta;
   return App.signalsMeta.filter(s => names.has(s.name) || names.has(s.std_name));
 }
 
@@ -833,12 +834,16 @@ function _renderProfilesPanel(profileData, sessionsData) {
     const card = document.createElement("div");
     card.className = "item-card" + (p.selected ? " selected" : "");
     const signalNames = _profileSignalNames(p);
-    const chips = signalNames.slice(0, 6).map(s => {
-      const m = App.signalsMeta.find(x => x.name === s);
-      return `<span class="chip ${m?.writable ? "writable" : ""}">${s}</span>`;
-    }).join("") + (signalNames.length > 6 ? `<span class="chip">+${signalNames.length - 6}</span>` : "");
+    const hasWildcard = signalNames.includes('*');
+    const effectiveSignalNames = hasWildcard ? App.signalsMeta.map(s => s.name) : signalNames;
+    const chips = hasWildcard
+      ? '<span class="chip writable">* (all signals)</span>'
+      : signalNames.slice(0, 6).map(s => {
+        const m = App.signalsMeta.find(x => x.name === s);
+        return `<span class="chip ${m?.writable ? "writable" : ""}">${s}</span>`;
+      }).join("") + (signalNames.length > 6 ? `<span class="chip">+${signalNames.length - 6}</span>` : "");
 
-    const writableCount = signalNames.filter(n => App.signalsMeta.find(s => s.name === n)?.writable).length;
+    const writableCount = effectiveSignalNames.filter(n => App.signalsMeta.find(s => s.name === n)?.writable).length;
     const permissionLabel = _profilePermission(p).join(' / ');
     card.innerHTML = `
       <div class="item-card-header">
@@ -851,7 +856,7 @@ function _renderProfilesPanel(profileData, sessionsData) {
       </div>
       <div class="item-card-body">
         <div style="margin-bottom:4px"><span class="badge badge--neutral">${permissionLabel}</span></div>
-        <div>${signalNames.length} signals &nbsp;<span style="color:var(--accent);font-size:11px">${writableCount} writable</span></div>
+        <div>${effectiveSignalNames.length} signals &nbsp;<span style="color:var(--accent);font-size:11px">${writableCount} writable</span></div>
         <div class="signals-chips">${chips}</div>
       </div>`;
     grid.appendChild(card);
@@ -897,7 +902,9 @@ document.addEventListener("DOMContentLoaded", () => {
     let permission = [...document.querySelectorAll("#pf-permission input:checked")].map(i => i.value);
     if (!permission.length) permission = ['read'];
     if (permission.includes('full')) permission = ['full'];
-    const signals = selectedSignals.map((name) => ({ name, permission }));
+    const signals = selectedSignals.length === App.signalsMeta.length
+      ? [{ name: '*', permission }]
+      : selectedSignals.map((name) => ({ name, permission }));
     const description = (document.getElementById('pf-description').value || '').trim();
     const exinfoText = (document.getElementById('pf-exinfo').value || '').trim();
     let exinfo;
@@ -1006,10 +1013,11 @@ function _openProfileModal(profile = null) {
   });
 
   const selected = new Set(isEdit ? _profileSignalNames(profile) : []);
+  const selectsAllSignals = selected.has('*');
   App.signalsMeta.forEach(s => {
     const label = document.createElement("label");
     label.className = "check-item";
-    label.innerHTML = `<input type="checkbox" value="${s.name}" ${selected.has(s.name) ? "checked" : ""} />${s.name}`;
+    label.innerHTML = `<input type="checkbox" value="${s.name}" ${selectsAllSignals || selected.has(s.name) ? "checked" : ""} />${s.name}`;
     checks.appendChild(label);
   });
 

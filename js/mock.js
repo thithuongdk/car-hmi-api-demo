@@ -70,7 +70,9 @@ function _normalizeProfileSignals(rawSignals, fallbackPermission = ['read']) {
   const list = Array.isArray(rawSignals) ? rawSignals : [];
   const merged = new Map();
   list.forEach((item) => {
-    const entry = typeof item === 'string' ? { name: item, permission: fallbackPermission } : item;
+    const entry = typeof item === 'string'
+      ? { name: item, permission: item.trim() === '*' ? ['full'] : fallbackPermission }
+      : item;
     if (!entry || typeof entry !== 'object') return;
     const name = String(entry.name || '').trim();
     const permission = _normalizePermissionList(entry.permission || fallbackPermission);
@@ -1158,7 +1160,7 @@ class MockWebSocket {
         break;
 
       case 'subscribe': {
-        if (!msg.signals || msg.signals === '*') {
+        if (!msg.signals || msg.signals === '*' || (Array.isArray(msg.signals) && msg.signals.includes('*'))) {
           this._subscription = null;
         } else if (Array.isArray(msg.signals)) {
           this._subscription = new Set(_normalizeSignalList(msg.signals));

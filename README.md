@@ -90,7 +90,7 @@ GET    /api/restraints/video/:filename — stream matched video file from media/
 
 > **Signal Alias (`std_name`):** Mọi API endpoint (REST write, batch update, WebSocket subscribe/unsubscribe) đều chấp nhận cả `name` (signal_name gốc trong CAN DB) **và** `std_name` (tên chuẩn hóa từ `data/signal_std_name.json`). Response signals trả về `signal_name` + `std_name` ở REST snapshot và `name` + `std_name` ở WS frame.
 
-> **Profile schema:** `signals` trong `/api/profile` và `/api/profiles` là mảng object `{ name, permission }`. Mỗi signal tự khai báo permission theo cấp signal (`read`, `write`, `full`); field `permission` ở cấp profile không còn dùng nữa. Profile cũng có thể mang thêm `exinfo` là object tự do để frontend lưu metadata riêng.
+> **Profile schema:** Signal cụ thể dùng object `{ name, permission }` với permission `read`, `write` hoặc `full`. Profile toàn quyền có thể dùng dạng rút gọn `"signals": ["*"]`; wildcard `*` được hiểu là quyền `full` trên toàn bộ signal catalog. Field `permission` ở cấp profile không còn dùng nữa. Profile cũng có thể mang thêm `exinfo` là object tự do để frontend lưu metadata riêng.
 
 ## WebSocket Subscription Protocol
 

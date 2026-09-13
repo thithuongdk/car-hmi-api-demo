@@ -614,6 +614,13 @@
                 "SPS_FR_FootRestPosition",
                 "SPS_FR_HeadRestPosition"
             ]
+        },
+        {
+            "profile_name": "admin",
+            "description": "Full access to all signals and profile operations",
+            "signals": [
+                "*"
+            ]
         }
     ]
 }

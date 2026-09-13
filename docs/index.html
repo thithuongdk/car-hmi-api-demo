@@ -61,7 +61,7 @@ window.onload = function () {
     openapi: "3.0.3",
     info: {
       title: "CAN-HMI REST API",
-      description: "REST + WebSocket API contract for the Car HMI demo.\n\n**WebSocket realtime stream:** `wss://car-hmi-api-demo.onrender.com/ws/signals` — see [WebSocket Docs](/ws).\n\n**Signal alias (`std_name`):** REST write endpoints and WebSocket subscriptions accept canonical `name` and standardized `std_name`.\n\n**Profile update:** `PUT /api/profile` and `POST /api/profile` use `signals: [{ name, permission }]` (per-signal permissions only). Profiles may also carry `exinfo`, a free-form object for frontend-specific metadata.\n\n**Subscribe after connect:**\n```\n{ type: 'subscribe', signals: ['HMI_CrashSeverity'] }\n{ type: 'subscribe', signals: ['*'] }\n{ type: 'ping' }  ->  { type: 'pong' }\n```\n\n**Write broadcast:** successful writes from `PUT /signals/{signal_name}` and `POST /signals/batch_update` are pushed to WebSocket subscribers.\n\n**Profile scope:** `/signals` and `/signals/available` are filtered by active profile unless `X-Dev-Mode: true` is set.",
+      description: "REST + WebSocket API contract for the Car HMI demo.\n\n**WebSocket realtime stream:** `wss://car-hmi-api-demo.onrender.com/ws/signals` — see [WebSocket Docs](/ws).\n\n**Signal alias (`std_name`):** REST write endpoints and WebSocket subscriptions accept canonical `name` and standardized `std_name`.\n\n**Profile update:** Specific signals use `signals: [{ name, permission }]` with per-signal permissions. Use the shorthand `signals: ['*']` for full access to the complete signal catalog. Profiles may also carry `exinfo`, a free-form object for frontend-specific metadata.\n\n**Subscribe after connect:**\n```\n{ type: 'subscribe', signals: ['HMI_CrashSeverity'] }\n{ type: 'subscribe', signals: ['*'] }\n{ type: 'ping' }  ->  { type: 'pong' }\n```\n\n**Write broadcast:** successful writes from `PUT /signals/{signal_name}` and `POST /signals/batch_update` are pushed to WebSocket subscribers.\n\n**Profile scope:** `/signals` and `/signals/available` are filtered by active profile unless `X-Dev-Mode: true` is set.",
       version: "1.0.0",
       contact: { url: "https://car-hmi-api-demo.onrender.com" }
     },
@@ -714,9 +714,15 @@ window.onload = function () {
           type: "object",
           required: ["name", "permission"],
           properties: {
-            name: { type: "string", example: "ARS_FL_InjuryRiskAdaptive" },
+            name: { type: "string", description: "Signal name, std_name, or * for the complete signal catalog", example: "ARS_FL_InjuryRiskAdaptive" },
             permission: { type: "array", items: { type: "string" }, example: ["read", "write"] }
           }
+        },
+        ProfileSignalInput: {
+          oneOf: [
+            { $ref: "#/components/schemas/ProfileSignal" },
+            { type: "string", enum: ["*"], description: "Wildcard shorthand granting full access to the complete signal catalog" }
+          ]
         },
         ProfilesResponse: {
           type: "object",
@@ -790,7 +796,7 @@ window.onload = function () {
           required: ["name"],
           properties: {
             name:         { type: "string" },
-            signals:      { type: "array", items: { $ref: "#/components/schemas/ProfileSignal" } },
+            signals:      { type: "array", items: { $ref: "#/components/schemas/ProfileSignalInput" } },
             exinfo:       { type: "object", additionalProperties: true, example: { role: "dev" } },
             description:  { type: "string", nullable: true }
           }
@@ -801,7 +807,7 @@ window.onload = function () {
           properties: {
             section_id:   { type: "string", description: "Must match the current profile section_id" },
             name:         { type: "string" },
-            signals:      { type: "array", items: { $ref: "#/components/schemas/ProfileSignal" } },
+            signals:      { type: "array", items: { $ref: "#/components/schemas/ProfileSignalInput" } },
             exinfo:       { type: "object", additionalProperties: true, example: { role: "ops" } },
             description:  { type: "string", nullable: true }
           }

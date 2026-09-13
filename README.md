@@ -11,7 +11,7 @@ REST + WebSocket API demo cho Car HMI system dựa trên CAN DB (`data/can0.json
 | Mode | Dashboard | Profiles | Config | Signals Info |
 |---|---|---|---|---|
 | **User** | Signals theo active profile | ✅ CRUD | ❌ | ❌ |
-| **Dev** | Tất cả 167 signals | ✅ CRUD | ✅ | ✅ |
+| **Dev** | Tất cả 282 signals | ✅ CRUD | ✅ | ✅ |
 
 ## Tabs
 
@@ -20,12 +20,12 @@ REST + WebSocket API demo cho Car HMI system dựa trên CAN DB (`data/can0.json
 | 📊 Dashboard | Signal cards với live WS updates; write controls cho writable signals (TX) |
 | 👤 Profiles | CRUD profiles, select active → Dashboard filter theo profile (User mode) |
 | ⚙️ Config | (Dev mode only) Xem/sửa hardware, storage, safety config |
-| ℹ️ Signals Info | Bảng metadata đầy đủ 167 signals — `GET /signals/available` |
+| ℹ️ Signals Info | Bảng metadata đầy đủ 282 signals — `GET /signals/available` |
 | 📋 API Log | Log tất cả API calls + WS events (method, URL, request/response body, status) |
 
 ## Signal Catalogue
 
-167 signals từ `data/can0.json`. Một số đại diện:
+282 signals từ `data/can0.json`, sinh từ `candb/Interface_Panther_To_CarPC_v8.dbc`. Một số đại diện:
 
 | Signal | Unit | Min | Max | Writable | States |
 |---|---|---|---|---|---|
@@ -173,7 +173,7 @@ Trên Vercel `server.js` không chạy — app tự detect và dùng `MockWebSoc
 
 ## CAN DB
 
-Nguồn dữ liệu: `data/can0.json` (CAN database với 167 unique signals).
+Nguồn dữ liệu: `candb/Interface_Panther_To_CarPC_v8.dbc`; catalog runtime ở `data/can0.json` (55 messages, 282 unique signals).
 Cấu trúc: `{ messages: { MsgName: { id, size, senders, signals: { SigName: { minimum, maximum, unit, description, states, TX, RX } } } } }`
 
 ## Tests
@@ -227,10 +227,11 @@ car-hmi-api-demo/
 ├── render.yaml       — Render deployment config
 ├── _test_mock.js     — Integration tests (39 tests)
 ├── candb/
+│   ├── Interface_Panther_To_CarPC_v8.dbc — nguồn DBC của signal catalog
 │   ├── p_dummy.dbc   — nguồn DBC mẫu
 │   └── dbc2signal.js — DBC→JSON converter
 ├── data/
-│   ├── can0.json     — CAN database (167 signals)
+│   ├── can0.json     — CAN database (282 signals)
 │   ├── config.json   — server config
 │   ├── info.json     — user profiles
 │   └── signal_std_name.json  — signal_name → std_name alias map

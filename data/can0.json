@@ -1,11 +1,13 @@
 {
   "messages": {
-    "SBS_HB_State": {
-      "id": 412,
-      "size": 5,
-      "senders": [],
+    "SBS_HB_RR1_Response": {
+      "id": 414,
+      "size": 4,
+      "senders": [
+        "PUMA_RR1"
+      ],
       "signals": {
-        "HB_State_FL": {
+        "HB_PowerOut_RR1": {
           "start_bit": null,
           "length": 8,
           "byte_order": "little_endian",
@@ -21,10 +23,10 @@
           "TX": false,
           "tag": [
             "HB",
-            "FL"
+            "RR1"
           ]
         },
-        "HB_State_FR": {
+        "HB_State_RR1": {
           "start_bit": 8,
           "length": 8,
           "byte_order": "little_endian",
@@ -40,18 +42,18 @@
           "TX": false,
           "tag": [
             "HB",
-            "FR"
+            "RR1"
           ]
         },
-        "HB_State_RL1": {
+        "HB_ActualTemp_RR1": {
           "start_bit": 16,
           "length": 8,
           "byte_order": "little_endian",
           "is_signed": false,
-          "factor": 1.0,
-          "offset": 0.0,
-          "minimum": 0.0,
-          "maximum": 255.0,
+          "factor": 0.5,
+          "offset": -40.0,
+          "minimum": -40.0,
+          "maximum": 87.5,
           "unit": null,
           "description": null,
           "states": [],
@@ -59,11 +61,39 @@
           "TX": false,
           "tag": [
             "HB",
-            "RL1"
+            "RR1"
           ]
         },
-        "HB_State_RL2": {
+        "HB_TargetTemp_RR1": {
           "start_bit": 24,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 0.5,
+          "offset": -40.0,
+          "minimum": -40.0,
+          "maximum": 87.5,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "HB",
+            "RR1"
+          ]
+        }
+      }
+    },
+    "SBS_HB_RL2_Response": {
+      "id": 413,
+      "size": 4,
+      "senders": [
+        "PUMA_R2"
+      ],
+      "signals": {
+        "HB_PowerOut_RL2": {
+          "start_bit": null,
           "length": 8,
           "byte_order": "little_endian",
           "is_signed": false,
@@ -81,8 +111,8 @@
             "RL2"
           ]
         },
-        "HB_State_RR1": {
-          "start_bit": 32,
+        "HB_State_RL2": {
+          "start_bit": 8,
           "length": 8,
           "byte_order": "little_endian",
           "is_signed": false,
@@ -97,7 +127,283 @@
           "TX": false,
           "tag": [
             "HB",
-            "RR1"
+            "RL2"
+          ]
+        },
+        "HB_ActualTemp_RL2": {
+          "start_bit": 16,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 0.5,
+          "offset": -40.0,
+          "minimum": -40.0,
+          "maximum": 87.5,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "HB",
+            "RL2"
+          ]
+        },
+        "HB_TargetTemp_RL2": {
+          "start_bit": 24,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 0.5,
+          "offset": -40.0,
+          "minimum": -40.0,
+          "maximum": 87.5,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "HB",
+            "RL2"
+          ]
+        }
+      }
+    },
+    "SBS_HB_RL1_Response": {
+      "id": 412,
+      "size": 4,
+      "senders": [
+        "PUMA_R1"
+      ],
+      "signals": {
+        "HB_PowerOut_RL1": {
+          "start_bit": null,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "HB",
+            "RL1"
+          ]
+        },
+        "HB_State_RL1": {
+          "start_bit": 8,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "HB",
+            "RL1"
+          ]
+        },
+        "HB_ActualTemp_RL1": {
+          "start_bit": 16,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 0.5,
+          "offset": -40.0,
+          "minimum": -40.0,
+          "maximum": 87.5,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "HB",
+            "RL1"
+          ]
+        },
+        "HB_TargetTemp_RL1": {
+          "start_bit": 24,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 0.5,
+          "offset": -40.0,
+          "minimum": -40.0,
+          "maximum": 87.5,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "HB",
+            "RL1"
+          ]
+        }
+      }
+    },
+    "MON_OMS_State": {
+      "id": 184,
+      "size": 1,
+      "senders": [
+        "SIMI"
+      ],
+      "signals": {
+        "OMS_State_Camera": {
+          "start_bit": null,
+          "length": 1,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "OMS"
+          ]
+        },
+        "OMS_State_StrainGauge": {
+          "start_bit": 1,
+          "length": 1,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "OMS"
+          ]
+        },
+        "OMS_State_CapSensor": {
+          "start_bit": 2,
+          "length": 1,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "OMS"
+          ]
+        }
+      }
+    },
+    "INC_HMI_SensorFusionRequest": {
+      "id": 132,
+      "size": 1,
+      "senders": [
+        "CAR_PC"
+      ],
+      "signals": {
+        "HMI_SensorFusion_Camera": {
+          "start_bit": null,
+          "length": 1,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": true,
+          "tag": [
+            "HMI"
+          ]
+        },
+        "HMI_SensorFusion_StrainGage": {
+          "start_bit": 1,
+          "length": 1,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": true,
+          "tag": [
+            "HMI"
+          ]
+        },
+        "HMI_SensorFusion_CapSensor": {
+          "start_bit": 2,
+          "length": 1,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": true,
+          "tag": [
+            "HMI"
+          ]
+        }
+      }
+    },
+    "SYS_ECU_PowerRequest": {
+      "id": 513,
+      "size": 1,
+      "senders": [
+        "CAN_IO"
+      ],
+      "signals": {
+        "ECU_PowerRequest_Jetson": {
+          "start_bit": null,
+          "length": 1,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ECU"
           ]
         }
       }
@@ -183,6 +489,42 @@
         },
         "COM_Status_PumaRR1Can": {
           "start_bit": 4,
+          "length": 1,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "COM"
+          ]
+        },
+        "COM_State_JetsonCan": {
+          "start_bit": 5,
+          "length": 1,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "COM"
+          ]
+        },
+        "COM_Status_ElkCan": {
+          "start_bit": 6,
           "length": 1,
           "byte_order": "little_endian",
           "is_signed": false,
@@ -1294,7 +1636,7 @@
       "size": 8,
       "senders": [],
       "signals": {
-        "SPS_FR_SeatDirectionX": {
+        "SPS_RR1_SeatDirectionX": {
           "start_bit": null,
           "length": 12,
           "byte_order": "little_endian",
@@ -1302,18 +1644,18 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "mm",
-          "description": "FR Seat x-for Direction Actuator",
+          "description": "RR1 Seat x-for Direction Actuator",
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RR1"
           ]
         },
-        "SPS_FR_SeatDirectionZ": {
+        "SPS_RR1_SeatDirectionZ": {
           "start_bit": 12,
           "length": 12,
           "byte_order": "little_endian",
@@ -1321,18 +1663,18 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "mm",
-          "description": "FR Seat z-for Direction Actuator",
+          "description": "RR1 Seat z-for Direction Actuator",
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RR1"
           ]
         },
-        "SPS_FR_SeatBackRestPosition": {
+        "SPS_RR1_SeatBackRestPosition": {
           "start_bit": 24,
           "length": 12,
           "byte_order": "little_endian",
@@ -1340,18 +1682,18 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "Deg",
-          "description": "FR Seat BackRest for Position Actuator",
+          "description": "RR1 Seat BackRest for Position Actuator",
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RR1"
           ]
         },
-        "SPS_FR_FootRestPosition": {
+        "SPS_RR1_FootRestPosition": {
           "start_bit": 36,
           "length": 12,
           "byte_order": "little_endian",
@@ -1359,18 +1701,18 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "Deg",
-          "description": "FR Seat FootRest for Position Actuator",
+          "description": "RR1 Seat FootRest for Position Actuator",
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RR1"
           ]
         },
-        "SPS_FR_HeadRestPosition": {
+        "SPS_RR1_HeadRestPosition": {
           "start_bit": 48,
           "length": 12,
           "byte_order": "little_endian",
@@ -1378,15 +1720,15 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "mm",
-          "description": "FR Seat HeadRest for Position Actuator",
+          "description": "RR1 Seat HeadRest for Position Actuator",
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RR1"
           ]
         }
       }
@@ -1396,7 +1738,7 @@
       "size": 8,
       "senders": [],
       "signals": {
-        "SPS_FR_SeatDirectionX": {
+        "SPS_RL2_SeatDirectionX": {
           "start_bit": null,
           "length": 12,
           "byte_order": "little_endian",
@@ -1404,18 +1746,18 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
-          "unit": "mm",
-          "description": "FR Seat x-for Direction Actuator",
+          "maximum": 4095.0,
+          "unit": null,
+          "description": null,
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RL2"
           ]
         },
-        "SPS_FR_SeatDirectionZ": {
+        "SPS_RL2_SeatDirectionZ": {
           "start_bit": 12,
           "length": 12,
           "byte_order": "little_endian",
@@ -1423,18 +1765,18 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
-          "unit": "mm",
-          "description": "FR Seat z-for Direction Actuator",
+          "maximum": 4095.0,
+          "unit": null,
+          "description": null,
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RL2"
           ]
         },
-        "SPS_FR_SeatBackRestPosition": {
+        "SPS_RL2_SeatBackRestPosition": {
           "start_bit": 24,
           "length": 12,
           "byte_order": "little_endian",
@@ -1442,18 +1784,18 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
-          "unit": "Deg",
-          "description": "FR Seat BackRest for Position Actuator",
+          "maximum": 4095.0,
+          "unit": null,
+          "description": null,
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RL2"
           ]
         },
-        "SPS_FR_FootRestPosition": {
+        "SPS_RL2_FootRestPosition": {
           "start_bit": 36,
           "length": 12,
           "byte_order": "little_endian",
@@ -1461,18 +1803,18 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
-          "unit": "Deg",
-          "description": "FR Seat FootRest for Position Actuator",
+          "maximum": 4095.0,
+          "unit": null,
+          "description": null,
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RL2"
           ]
         },
-        "SPS_FR_HeadRestPosition": {
+        "SPS_RL2_HeadRestPosition": {
           "start_bit": 48,
           "length": 12,
           "byte_order": "little_endian",
@@ -1480,15 +1822,15 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
-          "unit": "mm",
-          "description": "FR Seat HeadRest for Position Actuator",
+          "maximum": 4095.0,
+          "unit": null,
+          "description": null,
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RL2"
           ]
         }
       }
@@ -1498,7 +1840,7 @@
       "size": 8,
       "senders": [],
       "signals": {
-        "SPS_FR_SeatDirectionX": {
+        "SPS_RL1_SeatDirectionX": {
           "start_bit": null,
           "length": 12,
           "byte_order": "little_endian",
@@ -1506,18 +1848,18 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
-          "unit": "mm",
-          "description": "FR Seat x-for Direction Actuator",
+          "maximum": 4095.0,
+          "unit": null,
+          "description": null,
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RL1"
           ]
         },
-        "SPS_FR_SeatDirectionZ": {
+        "SPS_RL1_SeatDirectionZ": {
           "start_bit": 12,
           "length": 12,
           "byte_order": "little_endian",
@@ -1525,18 +1867,18 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
-          "unit": "mm",
-          "description": "FR Seat z-for Direction Actuator",
+          "maximum": 4095.0,
+          "unit": null,
+          "description": null,
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RL1"
           ]
         },
-        "SPS_FR_SeatBackRestPosition": {
+        "SPS_RL1_SeatBackRestPosition": {
           "start_bit": 24,
           "length": 12,
           "byte_order": "little_endian",
@@ -1544,18 +1886,18 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
-          "unit": "Deg",
-          "description": "FR Seat BackRest for Position Actuator",
+          "maximum": 4095.0,
+          "unit": null,
+          "description": null,
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RL1"
           ]
         },
-        "SPS_FR_FootRestPosition": {
+        "SPS_RL1_FootRestPosition": {
           "start_bit": 36,
           "length": 12,
           "byte_order": "little_endian",
@@ -1563,18 +1905,18 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
-          "unit": "Deg",
-          "description": "FR Seat FootRest for Position Actuator",
+          "maximum": 4095.0,
+          "unit": null,
+          "description": null,
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RL1"
           ]
         },
-        "SPS_FR_HeadRestPosition": {
+        "SPS_RL1_HeadRestPosition": {
           "start_bit": 48,
           "length": 12,
           "byte_order": "little_endian",
@@ -1582,15 +1924,15 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
-          "unit": "mm",
-          "description": "FR Seat HeadRest for Position Actuator",
+          "maximum": 4095.0,
+          "unit": null,
+          "description": null,
           "states": [],
           "RX": true,
           "TX": false,
           "tag": [
             "SPS",
-            "FR"
+            "RL1"
           ]
         }
       }
@@ -5211,88 +5553,87 @@
         }
       }
     },
-    "SBS_HB_PowerOut": {
-      "id": 410,
+    "SBS_HB_FR_Response": {
+      "id": 411,
       "size": 4,
       "senders": [
-        "PANTHER",
-        "CAR_PC"
+        "PUMA_FR"
       ],
       "signals": {
         "HB_PowerOut_FR": {
           "start_bit": null,
-          "length": 7,
+          "length": 8,
           "byte_order": "little_endian",
           "is_signed": false,
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 127.0,
+          "maximum": 255.0,
           "unit": null,
           "description": null,
           "states": [],
           "RX": true,
-          "TX": true,
+          "TX": false,
           "tag": [
             "HB",
             "FR"
           ]
         },
-        "HB_PowerOut_RL1": {
+        "HB_ActualTemp_FR": {
           "start_bit": 8,
-          "length": 7,
+          "length": 8,
           "byte_order": "little_endian",
           "is_signed": false,
-          "factor": 1.0,
-          "offset": 0.0,
-          "minimum": 0.0,
-          "maximum": 127.0,
+          "factor": 0.5,
+          "offset": -40.0,
+          "minimum": -40.0,
+          "maximum": 87.5,
           "unit": null,
           "description": null,
           "states": [],
           "RX": true,
-          "TX": true,
+          "TX": false,
           "tag": [
             "HB",
-            "RL1"
+            "FR"
           ]
         },
-        "HB_PowerOut_RL2": {
+        "HB_TargetTemp_FR": {
           "start_bit": 16,
-          "length": 7,
+          "length": 8,
           "byte_order": "little_endian",
           "is_signed": false,
-          "factor": 1.0,
-          "offset": 0.0,
-          "minimum": 0.0,
-          "maximum": 127.0,
+          "factor": 0.5,
+          "offset": -40.0,
+          "minimum": -40.0,
+          "maximum": 87.5,
           "unit": null,
           "description": null,
           "states": [],
           "RX": true,
-          "TX": true,
+          "TX": false,
           "tag": [
             "HB",
-            "RL2"
+            "FR"
           ]
         },
-        "HB_PowerOut_RR1": {
+        "HB_State_FR": {
           "start_bit": 24,
-          "length": 7,
+          "length": 8,
           "byte_order": "little_endian",
           "is_signed": false,
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 127.0,
+          "maximum": 255.0,
           "unit": null,
           "description": null,
           "states": [],
           "RX": true,
-          "TX": true,
+          "TX": false,
           "tag": [
             "HB",
-            "RR1"
+            "FR"
           ]
         }
       }
@@ -5397,97 +5738,6 @@
           "TX": true,
           "tag": [
             "HB"
-          ]
-        }
-      }
-    },
-    "SBS_HB_TempOut": {
-      "id": 411,
-      "size": 8,
-      "senders": [
-        "PANTHER",
-        "CAR_PC",
-        "PUMA_FL",
-        "PUMA_FR",
-        "PUMA_R1",
-        "PUMA_R2",
-        "PUMA_RR1"
-      ],
-      "signals": {
-        "HB_TempOut_FR": {
-          "start_bit": null,
-          "length": 10,
-          "byte_order": "little_endian",
-          "is_signed": true,
-          "factor": 1.0,
-          "offset": 0.0,
-          "minimum": -512.0,
-          "maximum": 511.0,
-          "unit": null,
-          "description": null,
-          "states": [],
-          "RX": true,
-          "TX": true,
-          "tag": [
-            "HB",
-            "FR"
-          ]
-        },
-        "HB_TempOut_RL1": {
-          "start_bit": 16,
-          "length": 10,
-          "byte_order": "little_endian",
-          "is_signed": true,
-          "factor": 1.0,
-          "offset": 0.0,
-          "minimum": -512.0,
-          "maximum": 511.0,
-          "unit": null,
-          "description": null,
-          "states": [],
-          "RX": true,
-          "TX": true,
-          "tag": [
-            "HB",
-            "RL1"
-          ]
-        },
-        "HB_TempOut_RL2": {
-          "start_bit": 32,
-          "length": 10,
-          "byte_order": "little_endian",
-          "is_signed": true,
-          "factor": 1.0,
-          "offset": 0.0,
-          "minimum": -512.0,
-          "maximum": 511.0,
-          "unit": null,
-          "description": null,
-          "states": [],
-          "RX": true,
-          "TX": true,
-          "tag": [
-            "HB",
-            "RL2"
-          ]
-        },
-        "HB_TempOut_RR1": {
-          "start_bit": 48,
-          "length": 10,
-          "byte_order": "little_endian",
-          "is_signed": true,
-          "factor": 1.0,
-          "offset": 0.0,
-          "minimum": -512.0,
-          "maximum": 511.0,
-          "unit": null,
-          "description": null,
-          "states": [],
-          "RX": true,
-          "TX": true,
-          "tag": [
-            "HB",
-            "RR1"
           ]
         }
       }
@@ -6413,7 +6663,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 8191.0,
           "unit": "mm",
           "description": "Webbing Payout measured by ACR spool rotation",
           "states": [],
@@ -6480,7 +6730,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 8191.0,
           "unit": "mm",
           "description": "Webbing Payout measured by ACR spool rotation",
           "states": [],
@@ -6499,7 +6749,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 16383.0,
           "unit": null,
           "description": null,
           "states": [],
@@ -6547,7 +6797,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 8191.0,
           "unit": "mm",
           "description": "Webbing Payout measured by ACR spool rotation",
           "states": [],
@@ -6566,7 +6816,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 16383.0,
           "unit": null,
           "description": null,
           "states": [],
@@ -6614,7 +6864,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 8191.0,
           "unit": "mm",
           "description": "Webbing Payout measured by ACR spool rotation",
           "states": [],
@@ -6633,7 +6883,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 16383.0,
           "unit": null,
           "description": null,
           "states": [],
@@ -6681,7 +6931,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 8191.0,
           "unit": "mm",
           "description": "Webbing Payout measured by ACR spool rotation",
           "states": [],
@@ -6700,7 +6950,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 16383.0,
           "unit": null,
           "description": null,
           "states": [],
@@ -6747,7 +6997,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "mm",
           "description": "FL Seat x-for Direction Actuator",
           "states": [],
@@ -6766,7 +7016,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "mm",
           "description": "FL Seat z-for Direction Actuator",
           "states": [],
@@ -6785,7 +7035,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "Deg",
           "description": "FL Seat BackRest for Position Actuator",
           "states": [],
@@ -6804,7 +7054,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "Deg",
           "description": "FL Seat FootRest for Position Actuator",
           "states": [],
@@ -6823,7 +7073,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "mm",
           "description": "FL Seat HeadRest for Position Actuator",
           "states": [],
@@ -6851,7 +7101,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "mm",
           "description": "FR Seat x-for Direction Actuator",
           "states": [],
@@ -6870,7 +7120,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "mm",
           "description": "FR Seat z-for Direction Actuator",
           "states": [],
@@ -6889,7 +7139,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "Deg",
           "description": "FR Seat BackRest for Position Actuator",
           "states": [],
@@ -6908,7 +7158,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "Deg",
           "description": "FR Seat FootRest for Position Actuator",
           "states": [],
@@ -6927,7 +7177,7 @@
           "factor": 1.0,
           "offset": 0.0,
           "minimum": 0.0,
-          "maximum": 255.0,
+          "maximum": 4095.0,
           "unit": "mm",
           "description": "FR Seat HeadRest for Position Actuator",
           "states": [],

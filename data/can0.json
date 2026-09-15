@@ -1,5 +1,463 @@
 {
   "messages": {
+    "SBS_ISB_FL_Response": {
+      "id": 379,
+      "size": 4,
+      "senders": [
+        "PUMA_FL",
+        "PANTHER"
+      ],
+      "signals": {
+        "ISB_FL_ColorBlue_Resp": {
+          "start_bit": null,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": null,
+          "description": "Intensity for Color Blue on FL Buckle",
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "FL"
+          ]
+        },
+        "ISB_FL_ColorGreen_Resp": {
+          "start_bit": 8,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": "Custom RGBA Colorcode --> A will be the intensity",
+          "description": "Color Code for ISB with RGB and Intensity requested by HMI",
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "FL"
+          ]
+        },
+        "ISB_FL_ColorRed_Resp": {
+          "start_bit": 16,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "FL"
+          ]
+        },
+        "ISB_FL_Intensity_Resp": {
+          "start_bit": 24,
+          "length": 7,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 127.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "FL"
+          ]
+        }
+      }
+    },
+    "SBS_ISB_FR_Response": {
+      "id": 380,
+      "size": 4,
+      "senders": [
+        "PUMA_FR",
+        "PANTHER"
+      ],
+      "signals": {
+        "ISB_FR_ColorBlue_Resp": {
+          "start_bit": null,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "FR"
+          ]
+        },
+        "ISB_FR_ColorGreen_Resp": {
+          "start_bit": 8,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": "Custom RGBA Colorcode --> A will be the intensity",
+          "description": "Color Code for ISB with RGB and Intensity requested by HMI",
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "FR"
+          ]
+        },
+        "ISB_FR_ColorRed_Resp": {
+          "start_bit": 16,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "FR"
+          ]
+        },
+        "ISB_FR_Intensity_Resp": {
+          "start_bit": 24,
+          "length": 7,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 127.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "FR"
+          ]
+        }
+      }
+    },
+    "SBS_ISB_RL1_Response": {
+      "id": 381,
+      "size": 4,
+      "senders": [
+        "PUMA_R1",
+        "PANTHER"
+      ],
+      "signals": {
+        "ISB_RL1_ColorBlue_Resp": {
+          "start_bit": null,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "RL1"
+          ]
+        },
+        "ISB_RL1_ColorGreen_Resp": {
+          "start_bit": 8,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": "Custom RGBA Colorcode --> A will be the intensity",
+          "description": "Color Code for ISB with RGB and Intensity requested by HMI",
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "RL1"
+          ]
+        },
+        "ISB_RL1_ColorRed_Resp": {
+          "start_bit": 16,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "RL1"
+          ]
+        },
+        "ISB_RL1_Intensity_Resp": {
+          "start_bit": 24,
+          "length": 7,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 127.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "RL1"
+          ]
+        }
+      }
+    },
+    "SBS_ISB_RL2_Response": {
+      "id": 382,
+      "size": 4,
+      "senders": [
+        "PUMA_R2",
+        "PANTHER"
+      ],
+      "signals": {
+        "ISB_RL2_ColorBlue_Resp": {
+          "start_bit": null,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "RL2"
+          ]
+        },
+        "ISB_RL2_ColorGreen_Resp": {
+          "start_bit": 8,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": "Custom RGBA Colorcode --> A will be the intensity",
+          "description": "Color Code for ISB with RGB and Intensity requested by HMI",
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "RL2"
+          ]
+        },
+        "ISB_RL2_ColorRed_Resp": {
+          "start_bit": 16,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "RL2"
+          ]
+        },
+        "ISB_RL2_Intensity_Resp": {
+          "start_bit": 24,
+          "length": 7,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 127.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "RL2"
+          ]
+        }
+      }
+    },
+    "SBS_ISB_RR1_Response": {
+      "id": 383,
+      "size": 4,
+      "senders": [
+        "PUMA_RR1",
+        "PANTHER"
+      ],
+      "signals": {
+        "ISB_RR1_ColorBlue_Resp": {
+          "start_bit": null,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "RR1"
+          ]
+        },
+        "ISB_RR1_ColorGreen_Resp": {
+          "start_bit": 8,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": "Custom RGBA Colorcode --> A will be the intensity",
+          "description": "Color Code for ISB with RGB and Intensity requested by HMI",
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "RR1"
+          ]
+        },
+        "ISB_RR1_ColorRed_Resp": {
+          "start_bit": 16,
+          "length": 8,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 255.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "RR1"
+          ]
+        },
+        "ISB_RR1_Intensity_Resp": {
+          "start_bit": 24,
+          "length": 7,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 127.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "ISB",
+            "RR1"
+          ]
+        }
+      }
+    },
+    "IRS_SEAL_RL2_Response": {
+      "id": 371,
+      "size": 1,
+      "senders": [
+        "PANTHER"
+      ],
+      "signals": {
+        "SEAL_RL2_ActivationStatus": {
+          "start_bit": null,
+          "length": 2,
+          "byte_order": "little_endian",
+          "is_signed": false,
+          "factor": 1.0,
+          "offset": 0.0,
+          "minimum": 0.0,
+          "maximum": 3.0,
+          "unit": null,
+          "description": null,
+          "states": [],
+          "RX": true,
+          "TX": false,
+          "tag": [
+            "SEAL",
+            "RL2"
+          ]
+        }
+      }
+    },
     "SBS_HB_RR1_Response": {
       "id": 414,
       "size": 4,

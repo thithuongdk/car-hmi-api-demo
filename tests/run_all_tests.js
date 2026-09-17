@@ -90,6 +90,15 @@ function run(label, scriptPath, args = []) {
     console.error(`\n  ❌ Mock API tests failed`);
   }
 
+  totalTests++;
+  try {
+    await run('API reference coverage', path.join(TESTS, 'test_api_reference.js'), quickMode ? ['--quick'] : []);
+    totalPassed++;
+  } catch (error) {
+    totalFailed++;
+    console.error('API reference coverage failed:', error.message);
+  }
+
   if (quickMode) {
     console.log(`\n${colors.bright}${colors.yellow}── Quick mode: skipping server-dependent tests ──${colors.reset}`);
   } else {

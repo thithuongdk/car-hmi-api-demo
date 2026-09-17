@@ -6,6 +6,21 @@ REST + WebSocket API demo cho Car HMI system dựa trên CAN DB (`data/can0.json
 
 🔗 **[Live Demo — Render](https://car-hmi-api-demo.onrender.com)** &nbsp;|&nbsp; **[Static Demo — Vercel](https://car-hmi-api-demo.vercel.app)** &nbsp;|&nbsp; 📖 **[API Docs](https://car-hmi-api-demo.onrender.com/docs)** &nbsp;|&nbsp; **[WS Docs](https://car-hmi-api-demo.onrender.com/ws)**
 
+## API Explorer theo tài liệu tiếng Việt
+
+Tab **API Explorer** (Dev mode) cung cấp đủ **53 thao tác HTTP** trong [API reference](docs/api_reference_vi.md). Chọn operation, nhập path/query/JSON body rồi bấm **Gửi request**. Response hiển thị mã HTTP, thời gian và toàn bộ JSON, bao gồm `warnings`/`errors` nếu batch chỉ thành công một phần. Các request cũng được ghi vào API Log.
+
+- **Kết nối**: lưu Base URL, API key, Client ID và profile trên trình duyệt, rồi kết nối lại. `X-Dev-Mode: true` được bật riêng trên form; không thay thế API key. Chọn **Dùng demo offline** hoặc thêm `?mock=1` để dùng MOCK. Backend được chỉ định rõ luôn ở LIVE và hiển thị lỗi kết nối, không tự chuyển sang mock.
+- **Signals/config**: đọc/ghi/batch, history (`start`, `end`, `limit`, `offset`), cấu hình từng signal, processor, general và system; tạo/liệt kê/phục hồi backup, reset và reload. Dùng ID từ danh sách backup cho restore; dùng `section_id` từ GET profile cho PUT profile.
+- **System/media**: info, health, readiness, metrics, CAN retry/reboot và các alias; adaptive restraint hỗ trợ query lặp như `System=fusion&System=camera&RawData=false`; camera status/MJPEG và video player.
+- **WebSocket**: chọn `/ws/signals`, `/ws/subscribe` hoặc `/ws/all`; kết nối/ngắt, subscribe/unsubscribe/ping, `mode` và `rate_ms`. Log hiển thị tối đa 10 signals đầu mỗi frame lớn; API Log lưu frame đầy đủ. `/ws/all` dùng để nhận frames.
+
+Các lệnh retry/reboot trên Node demo yêu cầu server được khởi động với biến môi trường `API_KEY` là key thực, và client gửi cùng key kèm `X-Dev-Mode: true`.
+
+Server Node là môi trường demo: system config chỉ mô phỏng các field trả trong `fields`, backup chỉ lưu trong bộ nhớ; retry/reboot trả `simulated: true`, không tác động máy/CAN thật. History chỉ là snapshot hiện tại với bộ lọc/phân trang. Camera chưa cấu hình trả trạng thái unavailable. MOCK mô phỏng signal WebSocket; metrics, `mode` và `rate_ms` cần backend LIVE để kiểm tra chính xác. Kết nối backend Car-HMI thật bằng Base URL để dùng policy/config/history/camera thật trong tài liệu.
+
+Preset được sinh từ tài liệu bằng `python3 scripts/build_api_catalog.py`. Chạy `node tests/test_api_reference.js` để kiểm tra catalog, policy, backup/restore, mock và endpoint HTTP; kiểm tra này cũng nằm trong `npm test`.
+
 ## Modes
 
 | Mode | Dashboard | Profiles | Config | Signals Info |
@@ -19,7 +34,8 @@ REST + WebSocket API demo cho Car HMI system dựa trên CAN DB (`data/can0.json
 |---|---|
 | 📊 Dashboard | Signal cards với live WS updates; write controls cho writable signals (TX) |
 | 👤 Profiles | CRUD profiles, select active → Dashboard filter theo profile (User mode) |
-| ⚙️ Config | (Dev mode only) Xem/sửa hardware, storage, safety config |
+| ⚙️ Config | (Dev mode only) Đọc/sửa application config qua `/config/general` |
+| 🛠 API Explorer | 53 thao tác HTTP, query/body/header, camera/video và 3 endpoint WebSocket |
 | ℹ️ Signals Info | Bảng metadata đầy đủ 282 signals — `GET /signals/available` |
 | 📋 API Log | Log tất cả API calls + WS events (method, URL, request/response body, status) |
 
@@ -60,8 +76,10 @@ POST   /api/profile/offline       — mark session offline immediately (requires
 
 # Config
 GET    /configs                   — full system info (read-only)
-GET    /config                    — editable config snapshot
-PUT    /config                    — update config (section_id required)
+GET    /config                    — danh sách cấu hình signal
+GET    /config/general            — application config snapshot
+PATCH  /config/general            — partial application config update
+PUT    /config                    — legacy update config (section_id required)
 
 # Signals
 GET    /signals                   — snapshot current values (`items`, `total`, `warnings`)

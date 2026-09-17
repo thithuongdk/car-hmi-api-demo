@@ -247,17 +247,19 @@ async function runTests() {
 
   // ── GET /config ───────────────────────────────────────────────────────────
   console.log('\n━━━ GET /config ───────────────────────────────────────────────');
-  const cfg = await request('GET', '/config');
-  ok('200 OK',                          cfg.status === 200);
-  ok('has hardware.can_bus',            !!cfg.body?.hardware?.can_bus);
-  ok('has storage',                     !!cfg.body?.storage);
-  ok('has safety',                      !!cfg.body?.safety);
-  ok('has section_id',                  typeof cfg.body?.section_id === 'number');
-  console.log(`   section_id: ${cfg.body.section_id}`);
+  const signalConfigs = await request('GET', '/config');
+  ok('200 OK signal config list', signalConfigs.status === 200);
+  ok('signal configs array', Array.isArray(signalConfigs.body));
+  ok('signal config has signal_name', typeof signalConfigs.body[0]?.signal_name === 'string');
+  const cfg = await request('GET', '/config/general');
+  ok('200 OK general config', cfg.status === 200);
+  ok('has hardware.can_bus', !!cfg.body?.hardware?.can_bus);
+  ok('has storage', !!cfg.body?.storage);
+  ok('has safety', !!cfg.body?.safety);
 
   // ── PUT /config ───────────────────────────────────────────────────────────
   console.log('\n━━━ PUT /config ──────────────────────────────────────────────');
-  const cfgSid = cfg.body.section_id;
+  const cfgSid = configs.body.section_id;
   const updatedCfg = await request('PUT', '/config', {
     section_id: cfgSid,
     storage: { retention_days: 99 },

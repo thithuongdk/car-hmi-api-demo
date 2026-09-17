@@ -49,6 +49,7 @@
   <button class="nav-tab dev-only" data-tab="system-info">📡 System Info</button>
   <button class="nav-tab dev-only" data-tab="devmode">🧪 Dev Mode</button>
   <button class="nav-tab dev-only" data-tab="restraints">🔒 Restraints</button>
+  <button class="nav-tab dev-only" data-tab="api-explorer">🛠 API Explorer</button>
   <button class="nav-tab"        data-tab="api-log">📋 API Log</button>
 </nav>
 
@@ -218,6 +219,35 @@
     </div>
   </div>
 
+  <div class="tab-pane" id="tab-api-explorer">
+    <div class="panel">
+      <div class="panel-header"><h2>API Explorer · 53 HTTP / 3 WebSocket</h2><a class="btn" href="docs/api_reference_vi.md" target="_blank">Tài liệu tiếng Việt</a></div>
+      <details class="explorer-connection"><summary>Kết nối: API key, profile và client</summary>
+        <div class="explorer-grid"><label>Base URL<input class="input" id="connection-base" type="url"></label><label>API key<input class="input" id="connection-key" type="password" autocomplete="off"></label><label>Client ID<input class="input" id="connection-client"></label><label>Profile name<input class="input" id="connection-profile"></label></div>
+        <button class="btn" id="connection-save" type="button">Lưu &amp; kết nối lại</button> <button class="btn" id="connection-offline" type="button">Dùng demo offline</button>
+        <p>Thông tin lưu trên trình duyệt này. LIVE gọi backend đã chọn; MOCK mô phỏng dữ liệu. Backup của demo chỉ lưu trong bộ nhớ và mất khi tải lại.</p>
+      </details>
+      <div class="explorer-grid explorer-workspace">
+        <form id="explorer-form">
+          <label>HTTP operation<select class="sel" id="explorer-operation"></select></label>
+          <p id="explorer-description"></p><p class="explorer-hint" id="explorer-auth"></p>
+          <div id="explorer-params"></div>
+          <label>Query string<input class="input" id="explorer-query" placeholder="limit=100&amp;offset=0"></label><p class="explorer-hint" id="explorer-query-hint"></p>
+          <label id="explorer-body-row">JSON body<textarea class="input" id="explorer-body" rows="12" spellcheck="false"></textarea></label>
+          <label class="explorer-checkbox"><input type="checkbox" id="explorer-dev"> Gửi X-Dev-Mode: true</label>
+          <button class="btn btn-primary" id="explorer-send" type="submit">Gửi request</button>
+        </form>
+        <div><output id="explorer-status" aria-live="polite"></output><pre id="explorer-response" class="explorer-output"></pre><div id="explorer-media"></div></div>
+      </div>
+      <hr>
+      <h3>WebSocket</h3>
+      <div class="explorer-grid"><label>Endpoint<select class="sel" id="explorer-ws-path"><option>/ws/signals</option><option>/ws/subscribe</option><option>/ws/all</option></select></label><label>Signals / channels (phân cách dấu phẩy)<input class="input" id="explorer-ws-signals" value="*, metrics"></label><label>Mode<select class="sel" id="explorer-ws-mode"><option>continuous</option><option>once</option></select></label><label>rate_ms<input class="input" id="explorer-ws-rate" type="number" min="0" value="200"></label></div>
+      <div class="explorer-actions"><button class="btn" id="explorer-ws-connect">Kết nối</button><button class="btn" id="explorer-ws-close">Ngắt</button><button class="btn" data-ws-send="subscribe">Subscribe</button><button class="btn" data-ws-send="unsubscribe">Unsubscribe</button><button class="btn" data-ws-send="ping">Ping</button></div>
+      <p class="explorer-hint">/ws/all tự nhận frames. Metrics, mode và rate_ms được xử lý bởi backend LIVE; MOCK chỉ mô phỏng signal stream.</p>
+      <pre id="explorer-ws-log" class="explorer-output" aria-live="polite"></pre>
+    </div>
+  </div>
+
   <!-- API LOG -->
   <div class="tab-pane" id="tab-api-log">
     <div class="panel">
@@ -291,6 +321,10 @@
 
 <script src="js/mock.js"></script>
 <script src="js/api.js"></script>
+<script src="js/demo-system-config.js"></script>
+<script src="js/mock-extensions.js"></script>
+<script src="js/api-catalog.js"></script>
+<script src="js/api-explorer.js"></script>
 <script src="js/app.js"></script>
 <script src="js/devmode.js"></script>
 </body>

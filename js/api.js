@@ -47,7 +47,7 @@ const RealAPI = (() => {
     localStorage.setItem('car_hmi_profile_name', name);
   }
 
-  async function _req(method, path, body, extraHeaders) {
+  async function _req(method, path, body, extraHeaders, fullResponse = false) {
     const opts = {
       method,
       headers: {
@@ -68,7 +68,7 @@ const RealAPI = (() => {
     let res, json;
     try {
       res  = await fetch(_base + path, opts);
-      json = await res.json().catch(() => ({}));
+      json = res.status === 204 ? null : await res.json();
     } catch (e) {
       Log.api(method, path, body ?? null, { error: e.message }, 0);
       throw e;
@@ -80,18 +80,20 @@ const RealAPI = (() => {
       const detailMsg = typeof json?.detail === 'string'
         ? json.detail
         : (json?.detail?.message || json?.error || `HTTP ${res.status}`);
-      throw Object.assign(new Error(detailMsg), json);
+      throw Object.assign(new Error(detailMsg), json, { status: res.status, response: json });
     }
 
     // Keep App.sectionId in sync with whatever the server last returned
-    if (json.section_id !== undefined) App.sectionId = json.section_id;
+    if (json?.section_id !== undefined) App.sectionId = json.section_id;
 
-    if (json.active) _setProfileName(json.active);
+    if (json?.active) _setProfileName(json.active);
 
-    return json;
+    return fullResponse ? { status: res.status, body: json } : json;
   }
 
   return {
+    request(method, path, body, headers) { return _req(method, path, body, headers, true); },
+    mediaUrl(path) { return new URL(path, _base).toString(); },
     // ── Profiles ─────────────────────────────────────────────────────────────
     getProfiles()           { return _req('GET',    '/api/profiles'); },
     getProfile(name)        {
@@ -121,13 +123,33 @@ const RealAPI = (() => {
 
     // ── Configs ───────────────────────────────────────────────────────────────
     getConfigs()           { return _req('GET', '/configs'); },
-    getConfig()            { return _req('GET', '/config'); },
-    updateConfig(payload)  { return _req('PUT', '/config', payload); },
+    getConfig()            { return _req('GET', '/config/general'); },
+    updateConfig(payload)  { return _req('PATCH', '/config/general', payload); },
+    getSignalConfigs()     { return _req('GET', '/config'); },
+    getSignalConfig(name)  { return _req('GET', `/config/signal/${encodeURIComponent(name)}`); },
+    updateSignalConfig(name, payload) { return _req('PATCH', `/config/signal/${encodeURIComponent(name)}`, payload); },
+    getProcessorConfig()   { return _req('GET', '/config/processor'); },
+    updateProcessorConfig(payload) { return _req('POST', '/config/processor', payload); },
+    getSystemConfig()      { return _req('GET', '/config/system'); },
+    updateSystemConfig(payload) { return _req('PATCH', '/config/system', payload); },
+    getSystemBackups()     { return _req('GET', '/config/system/backups'); },
+    createSystemBackup()   { return _req('POST', '/config/system/backups'); },
+    restoreSystemBackup(id) { return _req('POST', `/config/system/backups/${encodeURIComponent(id)}/restore`); },
+    resetSystemConfig()    { return _req('POST', '/config/system/reset'); },
+    reloadSystemConfig()   { return _req('POST', '/config/system/reload'); },
+    resetGeneralConfig()  { return _req('POST', '/config/general/reset'); },
 
     // ── Signals ───────────────────────────────────────────────────────────────
     getSignals()                 { return _req('GET',  '/signals'); },
     getSignal(name)              { return _req('GET',  `/signals/${encodeURIComponent(name)}`); },
     getSignalsAvailable()        { return _req('GET',  '/signals/available'); },
+    getSignalHistory(name, options = {}) {
+      const params = new URLSearchParams();
+      for (const key of ['start', 'end', 'limit', 'offset']) {
+        if (options[key] !== undefined && options[key] !== '') params.set(key, options[key]);
+      }
+      return _req('GET', `/signals/${encodeURIComponent(name)}/history?${params}`);
+    },
     updateSignal(name, value)    { return _req('PUT',  `/signals/${encodeURIComponent(name)}`, { value }); },
     batchUpdateSignals(signals)  { return _req('POST', '/signals/batch_update', { signals }); },
     resetElkFailureMemory()      { return _req('PUT', '/signals/ELK_ResetErrorFlags', { value: 1 }); },

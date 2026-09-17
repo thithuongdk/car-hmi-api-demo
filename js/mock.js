@@ -91,7 +91,7 @@ function _normalizeProfileExinfo(rawExinfo) {
   return JSON.parse(JSON.stringify(rawExinfo));
 }
 
-function _profileSignals(profile) {
+function _mockProfileSignals(profile) {
   return _normalizeProfileSignals(profile?.signals);
 }
 
@@ -341,7 +341,7 @@ const MockAPI = {
     const res = {
       profiles: d.profiles.map(p => ({
         name: p.profile_name,
-        signals: _profileSignals(p),
+        signals: _mockProfileSignals(p),
         exinfo: _normalizeProfileExinfo(p.exinfo),
         description: p.description || '',
         section_id: String(d.section_id).padStart(12, '0').slice(-12),
@@ -363,7 +363,7 @@ const MockAPI = {
     if (!p) { Log.api("GET", `/api/profile?name=${name}`, null, { error: "Not found" }, 404); throw new Error("Profile not found"); }
     const out = {
       name: p.profile_name,
-      signals: _profileSignals(p),
+      signals: _mockProfileSignals(p),
       exinfo: _normalizeProfileExinfo(p.exinfo),
       description: p.description || '',
       section_id: String(d.section_id).padStart(12, '0').slice(-12),

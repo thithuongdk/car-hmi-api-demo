@@ -323,6 +323,7 @@ function authMiddleware(req, res, next) {
   const needsAuth = (
     p === '/api/profiles'
     || p.startsWith('/api/profile')
+    || p.startsWith('/api/devmode')
     || p.startsWith('/signals')
     || p.startsWith('/alarms')
     || p.startsWith('/config')
@@ -1173,8 +1174,7 @@ app.get('/configs', (req, res) => {
 });
 
 app.get('/config', (req, res) => {
-  if (!CONFIG_DATA) return err(res, 1000, 'SYS_UNKNOWN', 'Config not available', 503);
-  res.json({ ...CONFIG_DATA, section_id: sectionId });
+  res.json(SIGNALS_META.map(s => buildSignalConfigPayload(s.name)));
 });
 
 app.put('/config', (req, res) => {
@@ -1197,6 +1197,30 @@ let processorConfig = {
   queue_policy: String(CONFIG_DATA?.processor?.queue_policy || 'drop_oldest'),
 };
 const signalConfigOverrides = {};
+const demoSystemConfig = require('./js/demo-system-config').create();
+
+app.use('/config/system', (req, res) => {
+  try {
+    const method = req.method;
+    if (method !== 'GET' && !requireProfilePermission(req, res, 'full').ok) return;
+    const result = method === 'PATCH' && req.path === '/'
+      ? { status: 200, body: demoSystemConfig.apply(req.body) }
+      : demoSystemConfig.request(method, req.originalUrl.split('?')[0]);
+    res.status(result.status).json(result.body);
+  } catch (error) {
+    apiErr(res, error.status || 500, error.detail?.code || 'system_config_error', error.message);
+  }
+});
+
+function demoSystemControl(req, res, reboot) {
+  if (!API_KEY_ENABLED || req.headers['x-api-key'] !== CONFIGURED_API_KEY) return apiErr(res, 401, 'unauthorized', 'A configured real API key is required');
+  if (!isDevMode(req)) return apiErr(res, 403, 'dev_mode_required', 'X-Dev-Mode: true is required');
+  if (reboot) demoSystemConfig.reboot();
+  // The demo never restarts the host or changes real CAN connections.
+  res.status(reboot ? 202 : 200).json(reboot ? { status: 'reboot_scheduled', simulated: true } : { scheduled: [true], count: 1, simulated: true });
+}
+app.post(['/system/can/retry', '/api/can/retry'], (req, res) => demoSystemControl(req, res, false));
+app.post(['/system/reboot', '/api/reboot'], (req, res) => demoSystemControl(req, res, true));
 
 function buildSignalConfigPayload(name) {
   const meta = SIGNALS_BY_NAME.get(name);
@@ -1266,6 +1290,7 @@ app.post('/config/processor', (req, res) => {
   const gate = requireProfilePermission(req, res, 'full');
   if (!gate.ok) return;
   const body = req.body || {};
+  if ((body.max_queue_size !== undefined && (!Number.isInteger(body.max_queue_size) || body.max_queue_size < 1)) || (body.queue_policy !== undefined && !['drop_oldest', 'reject'].includes(body.queue_policy))) return apiErr(res, 422, 'invalid_processor_config', 'Queue size must be a positive integer; policy must be drop_oldest or reject');
   if (body.max_queue_size !== undefined) processorConfig.max_queue_size = Number(body.max_queue_size);
   if (body.queue_policy !== undefined) processorConfig.queue_policy = String(body.queue_policy);
   if (CONFIG_DATA?.processor) {
@@ -1586,6 +1611,8 @@ app.get('/signals/:name/history', (req, res) => {
   const gate = requireProfilePermission(req, res, 'read', { signalName: meta?.name || ref });
   if (!gate.ok) return;
   if (!meta) return err(res, 3004, 'VAL_NOT_FOUND', `Signal '${ref}' not found`, 404);
+  const limit = Number(req.query.limit ?? 100), offset = Number(req.query.offset ?? 0);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 10000 || !Number.isInteger(offset) || offset < 0 || ['start', 'end'].some(k => req.query[k] !== undefined && !Number.isFinite(Number(req.query[k])))) return apiErr(res, 422, 'invalid_history_query', 'Invalid history query');
   const sv = signalValues[meta.name];
   const item = {
     signal_name: meta.name,
@@ -1594,7 +1621,8 @@ app.get('/signals/:name/history', (req, res) => {
     unit: meta.unit || null,
     timestamp: sv?.timestamp ?? Date.now() / 1000,
   };
-  res.json({ items: [item], total: 1, warnings: [] });
+  const inRange = (req.query.start === undefined || item.timestamp >= Number(req.query.start)) && (req.query.end === undefined || item.timestamp <= Number(req.query.end));
+  res.json({ items: inRange && !offset ? [item] : [], total: inRange ? 1 : 0, warnings: [], simulated: true });
 });
 
 app.put('/signals/:name', (req, res) => {
@@ -1976,17 +2004,16 @@ app.get('/adaptive_restraint/available', (req, res) => {
 
 app.get('/adaptive_restraint/chart_info', (req, res) => {
   const controls = {
-    System: req.query.System ? [].concat(req.query.System) : ['fusion'],
-    Age: req.query.Age ? [].concat(req.query.Age) : ['35y'],
+    System: req.query.System ? [].concat(req.query.System) : ['fusion', 'camera', 'non_adapt'],
+    Age: req.query.Age ? [].concat(req.query.Age) : ['35y', '65y'],
     Seatbelt: req.query.Seatbelt ? [].concat(req.query.Seatbelt) : ['3-point'],
-    Velocity: req.query.Velocity ? [].concat(req.query.Velocity).map(Number) : [40],
-    Weight: req.query.Weight ? [].concat(req.query.Weight).map(Number) : [49.0],
-    Height: req.query.Height ? [].concat(req.query.Height).map(Number) : [159.67],
-    Distance: req.query.Distance ? [].concat(req.query.Distance).map(Number) : [1440],
+    Velocity: req.query.Velocity ? [].concat(req.query.Velocity).map(Number) : [40, 50, 56],
+    Weight: req.query.Weight ? [].concat(req.query.Weight).map(Number) : [49.0, 58.67, 70.0],
+    Height: req.query.Height ? [].concat(req.query.Height).map(Number) : [155.0, 159.67, 170.0],
+    Distance: req.query.Distance ? [].concat(req.query.Distance).map(Number) : [1440, 1534, 1620],
     RawData: String(req.query.RawData || 'true').toLowerCase() !== 'false',
   };
-  const datas = [{
-    injury_risk_fusion_35y: {
+  const statistic = {
       values: [0.0031, 0.0045, 0.0052],
       min: 0.0031,
       max: 0.0052,
@@ -1995,8 +2022,8 @@ app.get('/adaptive_restraint/chart_info', (req, res) => {
       median: 0.0045,
       q3: 0.0049,
       'upper fence': 0.0052,
-    },
-  }];
+  };
+  const datas = controls.System.flatMap(system => controls.Age.map(age => ({ [`injury_risk_${system}_${age}`]: { ...statistic } })));
   const payload = {
     controls,
     datas,
@@ -2357,7 +2384,7 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[server] listening on http://0.0.0.0:${PORT}`);
+  console.log(`[server] listening on http://0.0.0.0:${server.address().port}`);
   console.log(`[server] REST API : http://localhost:${PORT}/api/info`);
   console.log(`[server] Swagger  : http://localhost:${PORT}/docs`);
   console.log(`[server] WS stream: ws://localhost:${PORT}/ws/signals`);

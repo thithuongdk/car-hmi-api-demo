@@ -28,7 +28,7 @@ const App = {
 
 // Auto-detect real server vs local/static mock.
 // On Vercel (static-only deploy) server.js is NOT running → treat as mock.
-// Detection: try GET /api/signals with a short timeout; if it responds → real server.
+// Detection: probe GET /signals for JSON; an explicit api_base stays LIVE.
 let _onRealServer = false;
 function _apiBase() {
   return new URLSearchParams(location.search).get('api_base')
@@ -50,20 +50,12 @@ function _wsBase() {
 }
 
 async function _detectServer() {
+  if (new URLSearchParams(location.search).get('mock') === '1') return false;
   const forcedBase = new URLSearchParams(location.search).get('api_base')
     || window.CAR_HMI_API_BASE
     || localStorage.getItem('car_hmi_api_base');
-  if (forcedBase) {
-    try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 3000);
-      const res = await fetch(`${_apiBase()}/signals`, { signal: ctrl.signal });
-      clearTimeout(timer);
-      return res.ok || res.status < 500;
-    } catch (_) {
-      return false;
-    }
-  }
+  // An explicit backend stays LIVE so connection/auth errors remain visible.
+  if (forcedBase) return true;
 
   // Try probing even on localhost so demo can use a real backend at :8000.
   if (typeof location !== 'undefined' && location.protocol === 'file:') return false;
@@ -72,7 +64,8 @@ async function _detectServer() {
     const timer = setTimeout(() => ctrl.abort(), 2000);
     const res = await fetch(`${_apiBase()}/signals`, { signal: ctrl.signal });
     clearTimeout(timer);
-    return res.ok || res.status < 500; // 200/404 means server running; timeout/network error means static
+    const isJson = (res.headers.get('content-type') || '').includes('application/json');
+    return isJson && res.status < 500;
   } catch (_) {
     return false; // fetch failed = no real server (Vercel static or offline)
   }
@@ -98,6 +91,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   _setupTabs();
   _setupModeToggle();
   _setupApiLog();
+  initApiExplorer();
   document.getElementById("btn-reset").addEventListener("click", () => {
     if (confirm("Reset all demo data to defaults?")) { Store.reset(); location.reload(); }
   });
@@ -109,15 +103,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Load initial data
-  await _loadSignalsMeta();
-  await _loadProfiles();
-  await _loadConfigs();
-  if (!document.getElementById('view-devmode')) {
-    await _initDevmode();
+  try {
+    await _loadSignalsMeta();
+    await _loadProfiles();
+    await _loadConfigs();
+    if (!document.getElementById('view-devmode')) {
+      await _initDevmode();
+    }
+    _initDashboard();
+    _connectWS();
+    _startProfileHeartbeat();
+  } catch (error) {
+    const grid = document.getElementById('signals-grid');
+    grid.textContent = `Không tải được API: ${error.message}. Mở API Explorer → Kết nối để kiểm tra Base URL/API key/profile.`;
   }
-  _initDashboard();
-  _connectWS();
-  _startProfileHeartbeat();
 
   window.addEventListener('beforeunload', () => {
     if (API && typeof API.setProfileOffline === 'function') {
@@ -722,7 +721,8 @@ function _profileName(p) {
 function _profileSignals(p) {
   const list = Array.isArray(p?.signals) ? p.signals : [];
   const merged = new Map();
-  list.forEach((item) => {
+  list.forEach((rawItem) => {
+    const item = typeof rawItem === 'string' ? { name: rawItem, permission: rawItem === '*' ? ['full'] : ['read'] } : rawItem;
     if (!item || typeof item !== 'object') return;
     const name = String(item?.name || '').trim();
     if (!name) return;
@@ -799,8 +799,10 @@ async function _loadProfiles() {
   sel.onchange = async () => {
     await API.selectProfile(sel.value, { devMode: App.mode === 'dev' });
     await _loadProfiles();
+    await _loadSignalsMeta();
     _renderDashboard();
-    if (App.mode !== 'dev') _wsSubscribe(_profileSignalNames(App.activeProfile) || '*');
+    if (App.ws) { App.ws.onclose = null; App.ws.close(); }
+    _connectWS();
   };
 
   if (API.getProfileSessions) {
@@ -1049,132 +1051,29 @@ function _closeProfileModal() {
 
 // ── Configs ───────────────────────────────────────────────────────────────────
 async function _loadConfigs() {
-  try {
-    const [infoRes, configRes] = await Promise.all([
-      API.getConfigs(),
-      API.getConfig(),
-    ]);
-    _renderConfigsPanel(infoRes, configRes);
-  } catch (e) {
-    const container = document.getElementById("configs-list");
-    if (container) {
-      container.innerHTML = `<div class="section-id-bar"><span>Config unavailable:</span><strong>${_escHtml(e.message)}</strong></div>`;
-    }
-  }
-}
-
-function _renderConfigsPanel(infoRes, configRes) {
   const container = document.getElementById("configs-list");
-  const INFO_SECTIONS = [
-    { key: "project",  label: "Project",  icon: "🚗" },
-    { key: "server",   label: "Server",   icon: "🌐" },
-    { key: "hardware", label: "Hardware", icon: "🔧" },
-    { key: "storage",  label: "Storage",  icon: "💾" },
-    { key: "safety",   label: "Safety",   icon: "🛡️" },
-    { key: "video",    label: "Video",    icon: "📷" },
-  ];
-
-  const infoHTML = INFO_SECTIONS.map(sec => {
-    const data = infoRes[sec.key];
-    if (!data) return '';
-    const rows = _flatKeys(data).map(([k, v]) =>
-      `<tr><td style="font-weight:500;width:220px;padding:4px 8px">${k}</td>
-           <td style="padding:4px 8px"><code style="font-size:11px">${_escHtml(String(v))}</code></td></tr>`
-    ).join('');
-    return `<div style="margin-bottom:10px">
-      <div style="font-weight:600;padding:5px 8px;background:var(--surface2,#2a2a2a);border-radius:4px 4px 0 0;font-size:12px">
-        ${sec.icon} ${sec.label}
-      </div>
-      <table class="data-table" style="margin:0;border-radius:0 0 4px 4px"><tbody>${rows}</tbody></table>
-    </div>`;
-  }).join('');
-
-  const sectionId = configRes.section_id;
-  // Build editable form from config.json sections: hardware, storage, safety
-  const CFG_SECTIONS = [
-    { key: "hardware", label: "Hardware (CAN Bus)", icon: "🔧" },
-    { key: "storage",  label: "Storage",            icon: "💾" },
-    { key: "safety",   label: "Safety",             icon: "🛡️" },
-  ];
-
-  const cfgFormHTML = CFG_SECTIONS.map(sec => {
-    const data = configRes[sec.key];
-    if (!data) return '';
-    const rows = _flatKeys(data).map(([k, v]) => {
-      const inputId = `cfg-inp-${sec.key}__${k.replace(/\./g, '_')}`;
-      const isNum  = typeof v === 'number';
-      const isBool = typeof v === 'boolean';
-      const ctrl = isBool
-        ? `<select id="${inputId}" data-section="${sec.key}" data-path="${k}" class="cfg-field" style="width:80px">
-             <option value="true" ${v ? 'selected' : ''}>true</option>
-             <option value="false" ${!v ? 'selected' : ''}>false</option>
-           </select>`
-        : `<input id="${inputId}" data-section="${sec.key}" data-path="${k}" class="cfg-field"
-             type="${isNum ? 'number' : 'text'}" value="${_escHtml(String(v))}"
-             style="width:${isNum ? '90px' : '200px'};padding:2px 6px;border-radius:4px;border:1px solid var(--border,#333);background:var(--surface2,#1e1e1e);color:inherit;font-size:11px" />`;
-      return `<tr>
-        <td style="padding:4px 8px;font-weight:500;font-size:11px;width:200px">${k}</td>
-        <td style="padding:4px 8px">${ctrl}</td>
-      </tr>`;
-    }).join('');
-    return `<div style="margin-bottom:10px">
-      <div style="font-weight:600;padding:5px 8px;background:var(--surface2,#2a2a2a);border-radius:4px 4px 0 0;font-size:12px;display:flex;justify-content:space-between;align-items:center">
-        <span>${sec.icon} ${sec.label}</span>
-        <button class="btn btn-sm btn-primary" onclick="App._saveConfigSection('${sec.key}',${sectionId})">Save</button>
-      </div>
-      <table class="data-table" style="margin:0;border-radius:0 0 4px 4px"><tbody>${rows}</tbody></table>
-    </div>`;
-  }).join('');
-
-  container.innerHTML = `
-    <div class="section-id-bar" style="margin-bottom:16px">
-      <span>section_id:</span><strong>${sectionId}</strong>
-      <span style="color:var(--muted);font-size:11px">- PUT /config must send matching section_id (409 on mismatch)</span>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
-      <div>
-        <h3 style="margin:0 0 10px;font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.05em">GET /configs - System Info (info.json, read-only)</h3>
-        ${infoHTML}
-      </div>
-      <div>
-        <h3 style="margin:0 0 10px;font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.05em">GET /config - Editable Config (config.json)</h3>
-        ${cfgFormHTML}
-      </div>
-    </div>`;
-}
-
-App._saveConfigSection = async (sectionKey, sectionId) => {
-  const container = document.getElementById("configs-list");
-  // Collect all inputs for this section
-  const fields = container.querySelectorAll(`.cfg-field[data-section="${sectionKey}"]`);
-  // Rebuild nested object from dot-path keys
-  function setDeep(obj, path, val) {
-    const parts = path.split('.');
-    let cur = obj;
-    for (let i = 0; i < parts.length - 1; i++) {
-      if (!cur[parts[i]]) cur[parts[i]] = {};
-      cur = cur[parts[i]];
-    }
-    cur[parts[parts.length - 1]] = val;
-  }
-  const nested = {};
-  fields.forEach(el => {
-    const rawVal = el.tagName === 'SELECT' ? el.value : el.value;
-    let val;
-    if (el.tagName === 'SELECT') {
-      val = rawVal === 'true' ? true : rawVal === 'false' ? false : rawVal;
-    } else if (el.type === 'number') {
-      val = parseFloat(rawVal);
-    } else {
-      val = rawVal;
-    }
-    setDeep(nested, el.dataset.path, val);
-  });
   try {
-    await API.updateConfig({ section_id: App.sectionId, [sectionKey]: nested });
-    await _loadConfigs();
-  } catch (e) { alert(e.message); }
-};
+    const response = await API.request('GET', '/config/general');
+    container.innerHTML = `<p>PATCH /config/general — chỉ gửi các field cần thay đổi. Signal, processor, system và backup có trong tab API Explorer.</p>
+      <label for="general-config-json">Application config (JSON)</label>
+      <textarea class="input" id="general-config-json" rows="22" style="width:100%;font-family:monospace;margin:12px 0"></textarea>
+      <button class="btn btn-primary" id="general-config-save">Lưu cấu hình</button>
+      <output id="general-config-status" aria-live="polite" style="margin-left:12px"></output>`;
+    document.getElementById('general-config-json').value = JSON.stringify(response.body, null, 2);
+    document.getElementById('general-config-save').onclick = async () => {
+      const button = document.getElementById('general-config-save');
+      const output = document.getElementById('general-config-status');
+      button.disabled = true;
+      try {
+        const payload = JSON.parse(document.getElementById('general-config-json').value);
+        const result = await API.request('PATCH', '/config/general', payload);
+        document.getElementById('general-config-json').value = JSON.stringify(result.body, null, 2);
+        output.textContent = `Đã lưu · HTTP ${result.status}`;
+      } catch (error) { output.textContent = error.message; }
+      finally { button.disabled = false; }
+    };
+  } catch (error) { container.textContent = `Config unavailable: ${error.message}`; }
+}
 
 // ── Signals Info table ────────────────────────────────────────────────────────
 function _renderSignalsInfo() {
@@ -1266,6 +1165,11 @@ async function _loadInfo() {
 function _renderInfoPanel(info) {
   const el = document.getElementById("info-content");
   if (!el || !info) return;
+
+  if (!info.project) {
+    el.innerHTML = `<table class="data-table"><tbody>${_flatKeys(info).map(([key, value]) => `<tr><td>${_escHtml(key)}</td><td>${_escHtml(String(value))}</td></tr>`).join('')}</tbody></table>`;
+    return;
+  }
 
   const SECTIONS = [
     { key: "project",  label: "Project",  icon: "🚗" },

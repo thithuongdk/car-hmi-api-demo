@@ -110,10 +110,10 @@ async function runTests() {
 
   // Cleanup
   const profs2 = await request('GET', '/api/profiles');
-  const stressProfiles = profs2.body.profiles.filter(p => p.profile_name.startsWith('_STRESS_'));
+  const stressProfiles = profs2.body.profiles.filter(p => p.name.startsWith('_STRESS_'));
   await Promise.all(
     stressProfiles.map(p =>
-      request('DELETE', `/api/profile/${encodeURIComponent(p.profile_name)}`)
+      request('DELETE', `/api/profile/${encodeURIComponent(p.name)}`)
     )
   );
   ok('Stress profiles cleaned up', true);
